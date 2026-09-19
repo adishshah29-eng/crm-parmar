@@ -1,0 +1,16 @@
+---
+description: Parmar CRM project rules — always apply
+alwaysApply: true
+---
+
+Read `brain/00-START-HERE.md` before writing any code in this repo, then
+`brain/02-system-design.md` and `brain/04-access-control.md`.
+
+Hard rules:
+- Never invent tables or columns. If it is not in `brain/03-data-model.md`, it does not exist.
+- Never change the database from the Supabase dashboard. Migrations only — see `brain/workflow/migrations.md`.
+- Never use the service_role key in application code. RLS is the security boundary.
+- Never guess business rules (working hours, SLA timings, permissions). They are written down. Ask if missing.
+- Always pull main before branching. See `brain/workflow/git-practices.md`.
+
+Log finished work in `brain/team/<developer>.md`.

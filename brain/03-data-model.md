@@ -1,0 +1,210 @@
+# Data model
+
+Authoritative list of tables. Canonical DDL is `supabase/migrations/0001_init.sql`. If code and this file disagree, this file wins and the code is a bug.
+
+Conventions: `uuid` primary keys with `gen_random_uuid()`, `timestamptz` for all times stored in UTC, snake_case names, every table has `created_at`.
+
+## Organisation
+
+### `users`
+Mirrors `auth.users`. `id` is the same uuid as the Supabase auth user.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | = `auth.users.id` |
+| full_name | text | |
+| email | text unique | |
+| phone | text | |
+| role | user_role | `super_admin \| admin \| manager \| sub_manager \| caller` |
+| parent_id | uuid → users | null for super_admin |
+| is_active | boolean | soft deactivate, never delete a user |
+| created_at | timestamptz | |
+
+### `user_hierarchy` (closure table)
+Every ancestor→descendant pair, including self at depth 0. Maintained by trigger on `users`.
+
+| ancestor_id | uuid → users |
+| descendant_id | uuid → users |
+| depth | int |
+
+PK `(ancestor_id, descendant_id)`.
+
+### `locations`
+| id | uuid PK |
+| name | text | e.g. Worli, Koregaon Park |
+| city | text | Mumbai \| Pune |
+
+### `projects`
+| id | uuid PK |
+| name | text |
+| location_id | uuid → locations |
+| developer | text |
+| is_active | boolean |
+
+### `user_scopes`
+A user's territory. One row per project or location covered. **Only managers get rows here.** Sub_managers and callers inherit through `parent_id` at query time.
+
+| id | uuid PK |
+| user_id | uuid → users |
+| project_id | uuid → projects | nullable |
+| location_id | uuid → locations | nullable |
+
+Exactly one of `project_id` / `location_id` must be non-null (CHECK constraint).
+
+### `user_availability`
+| user_id | uuid PK → users |
+| status | availability_status | `available \| on_site_visit \| off` |
+| delegate_to | uuid → users | nullable; required when `on_site_visit` |
+| updated_at | timestamptz |
+
+## Leads
+
+### `persons`
+One row per human. **Phone is the identity.**
+
+| id | uuid PK |
+| phone | text unique | E.164, e.g. `+919876543210` |
+| full_name | text |
+| email | text |
+| created_at | timestamptz |
+
+### `leads`
+One row per (person, project).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| person_id | uuid → persons | |
+| project_id | uuid → projects | |
+| location_id | uuid → locations | denormalised from project for fast territory checks |
+| assigned_to | uuid → users | nullable while queued |
+| call_status | call_status | default `new` |
+| temperature | temperature | nullable; only when `call_status='connected'` |
+| pipeline_stage | pipeline_stage | default `enquiry` |
+| is_live | boolean | true for Meta/99acres/portal leads — only these escalate |
+| assigned_at | timestamptz | |
+| first_touch_at | timestamptz | set once, on first activity |
+| last_activity_at | timestamptz | |
+| next_call_at | timestamptz | mandatory when status set to attempted/connected |
+| sla_due_at | timestamptz | assignment + 45 working minutes |
+| sla_breached_at | timestamptz | set by the escalation job |
+| renurture_at | timestamptz | set when lost; wakes the lead later |
+| budget_min / budget_max | numeric | nullable |
+| notes | text | |
+| created_at | timestamptz | |
+
+**UNIQUE `(person_id, project_id)`.** This is the rule that makes "1 lead = 1 person per project" real.
+
+### `sources`
+| id | uuid PK |
+| code | text unique | `meta`, `99acres`, `magicbricks`, `housing`, `agent`, `walkin`, `referral` |
+| name | text |
+| is_live | boolean | live sources trigger the 45-minute SLA |
+
+### `lead_sources`
+Many per lead. Nothing is merged away.
+
+| id | uuid PK |
+| lead_id | uuid → leads |
+| source_id | uuid → sources |
+| received_at | timestamptz |
+| campaign | text |
+| raw_payload | jsonb |
+
+### `lead_activities`
+Append-only. Never updated, never deleted.
+
+| id | uuid PK |
+| lead_id | uuid → leads |
+| user_id | uuid → users |
+| activity_type | text | `call \| remark \| status_change \| stage_change \| assignment \| site_visit` |
+| remark | text |
+| from_value / to_value | text |
+| created_at | timestamptz |
+
+### `assignments`
+Full ownership history.
+
+| id | uuid PK |
+| lead_id | uuid → leads |
+| from_user_id | uuid → users | nullable |
+| to_user_id | uuid → users |
+| reason | text | `round_robin \| manual \| escalation \| delegation \| exit_transfer \| import` |
+| created_by | uuid → users |
+| created_at | timestamptz |
+
+### `round_robin_state`
+| scope_key | text PK | `project:<uuid>` or `location:<uuid>` |
+| last_user_id | uuid → users |
+| updated_at | timestamptz |
+
+## Operations
+
+### `site_visits`
+| id | uuid PK |
+| lead_id | uuid → leads |
+| project_id | uuid → projects |
+| scheduled_at | timestamptz |
+| accompanied_by | uuid → users |
+| status | visit_status | `scheduled \| done \| no_show \| cancelled` |
+| outcome | text |
+| remark | text |
+| checkin_at | timestamptz |
+| checkin_lat / checkin_lng | double precision |
+| within_geofence | boolean |
+| created_by | uuid → users |
+
+### `attendance`
+| id | uuid PK |
+| user_id | uuid → users |
+| work_date | date |
+| check_in_at / check_out_at | timestamptz |
+| check_in_lat / check_in_lng | double precision |
+| check_out_lat / check_out_lng | double precision |
+
+UNIQUE `(user_id, work_date)`.
+
+### `geofences`
+| id | uuid PK |
+| project_id | uuid → projects |
+| lat / lng | double precision |
+| radius_m | int | default 200 |
+
+### `notifications`
+| id | uuid PK |
+| user_id | uuid → users |
+| type | text | `sla_breach \| assignment \| mention` |
+| lead_id | uuid → leads |
+| title / body | text |
+| is_read | boolean |
+| created_at | timestamptz |
+
+### `audit_log`
+| id | uuid PK |
+| actor_id | uuid → users |
+| action | text | `view_lead \| edit_lead \| reassign \| export \| login` |
+| entity_type / entity_id | text / uuid |
+| meta | jsonb |
+| created_at | timestamptz |
+
+Every export writes a row here with the row count and filter used.
+
+### `imports`
+| id | uuid PK |
+| uploaded_by | uuid → users |
+| filename | text |
+| total_rows / inserted / duplicates / errors | int |
+| error_report | jsonb |
+| created_at | timestamptz |
+
+## Enums
+
+```
+user_role:        super_admin, admin, manager, sub_manager, caller
+call_status:      new, attempted, connected, lost
+temperature:      hot, warm, cold
+pipeline_stage:   enquiry, qualified, site_visit_scheduled, site_visit_done,
+                  negotiation, booked, dropped
+availability_status: available, on_site_visit, off
+visit_status:     scheduled, done, no_show, cancelled
+```

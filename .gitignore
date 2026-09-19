@@ -1,0 +1,20 @@
+node_modules/
+.next/
+out/
+build/
+.env
+.env.local
+.env*.local
+.DS_Store
+*.log
+.vercel
+coverage/
+*.csv
+!supabase/fixtures/*.csv
+
+# next / ts
+*.tsbuildinfo
+next-env.d.ts
+
+# scaffold archive
+*.zip
