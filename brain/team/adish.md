@@ -1,6 +1,6 @@
 # Adish
 
-**Owns:** Foundation, auth, org, migrations, shared core, admin console
+**Owns:** Foundation, auth, org, migrations, shared core, admin console, dashboards
 
 This file belongs to Adish. Nobody else edits it. Everyone else reads it.
 
@@ -8,7 +8,7 @@ This file belongs to Adish. Nobody else edits it. Everyone else reads it.
 
 ## Currently working on
 
-Phase 0 — foundation. Next: Supabase project + migrations (runbook steps 5–9), then `actions/leads.ts`, `DataTable`, `LeadDetailShell`.
+Week 3, A3.1–A3.4 (import, export, audit viewer, password reset) — built. Waiting on `db push` of **0007 and 0008**, and on configuring Supabase email. Branch: `feat/org-user-management`.
 
 ## Blocked
 
@@ -34,6 +34,57 @@ _(anything the other three should know: a pattern you established, a gotcha you 
 ## Log
 
 Newest at the top. One entry per working session.
+
+### 2026-09-20 (final) — dashboards built
+- **D1.1–D2.4 built:** `/dashboard` with the four headline numbers, a Today / All-time toggle at the top, the lead-routing panel (admins), and every manager's portfolio by stage. Counted in SQL: **migration 0010** (`dashboard_counts`, `dashboard_portfolios`). **Apply it, then `npm run db:types`.**
+- Meaning of every number, and what the toggle changes: **D-035**. Assumptions to confirm are marked there (Monday week start, portfolio = own + team leads, default range Today, unassigned untouched leads counted).
+- Tests: `npm run test:dashboard` recomputes every number independently from raw rows and checks each role's scope. SKIPS until 0010 is applied. I could only check the SQL parses (offline), not run it.
+- New lead filter `owner=team:<managerId>` (a manager's whole book), used by the portfolio links.
+- Found in passing: the `03-data-model.md` functions table had a row outside the table; fixed.
+- **Gotcha for everyone writing tests:** a developer machine's clock can be hours off the database's (mine was 8 hours behind, on a different IST calendar day). "Today", "this week" and working hours are decided by the DATABASE, so tests must not use `new Date()` for them. Use `dbNow()` from `supabase/tests/db-clock.ts`; it reads the server's `Date` header.
+- `0009` is applied and `npm run test:territory` passes in full (assign, exit transfer, territory editor).
+
+### 2026-09-20 (last) — dashboards moved to me
+- The company dashboard (D1.1, D1.2, D1.3, D2.3, D2.4) moved from Sayli to me (D-034). Tasks are in `tasks/adish-tasks.md` under Dashboards; `getDashboard` is in its own section of the API contracts. I build them after Week 3, before the Week 4 hardening.
+- **Sayli:** your dashboard tasks are gone. When you start, your first task is attendance (D2.1, D2.2); it feeds lead routing. Please update your own `team/sayli.md` (the Owns line says dashboard). My dashboard reads `site_visits`, `attendance` and `geofences`, so tell me here before you change their columns.
+
+### 2026-09-20 (night) — migrations 0007 and 0008 applied; one fix needed
+- `test:admin` passes in full on the real database, including the 1,200-row import (1.3 s) and the re-import (1,200 duplicates, 0 new).
+- `test:territory` found a real bug in 0007: `set_user_scopes` failed with "permission denied for schema app". **New migration 0009 fixes it (D-033). Apply it, then re-run `npm run test:territory`.**
+
+### 2026-09-20 (evening) — Week 3 built: A3.1–A3.4
+- **A3.1** `/import`: choose source + file, map columns (guessed, then remembered per browser), preview, import in batches with progress, summary, downloadable error report, and a history table. **A3.2** "Export CSV" on `/leads`: audited BEFORE it returns data, refused if the audit write fails. **A3.3** `/audit`: exports first, then the filterable log. **A3.4** `/reset-password` + `/auth/confirm` + `/set-password`, and "Require password change" (optionally with a temporary password) on a user's page.
+- **Migrations to apply: 0007 and 0008.** Then `npm run db:types`.
+- **Configure Supabase email before go-live** (SMTP, redirect URLs, Reset Password template): `brain/PASSWORD-RESET.md`. Until then use the temporary-password route.
+- Assumptions to confirm are in D-030 (inactive project = error row; routing reason `round_robin`; limits 5,000 rows / 5 MB; mapping remembered per browser).
+- Tests: `npm run test:admin` — 68 checks pass; the 1,200-row import cycle SKIPS until 0008 is applied. Run it with `SUPABASE_SERVICE_ROLE_KEY` on the command line to include the real forced-password cycle.
+- **For everyone:** `lib/csv.ts` (`toCsv`, formula-safe) and `filteredLeads()` in `lib/leads/queries.ts` (the one place "the current filters" is defined) are shared.
+- Found and fixed while refactoring: an async function that returns a query builder AWAITS it (runs the query). `filteredLeads` now returns `{ query }`. Worth knowing before anyone writes a similar helper.
+
+### 2026-09-20 (later) — Week 2 built: A2.1–A2.5
+- **A2.1** `/territories` (coverage by city, gaps flagged) and `/territories/[managerId]` (editor with a LIVE overlap warning that never blocks Save). **A2.2** `/territories/projects`: create/edit locations and projects, deactivate not delete. **A2.3** `/leads` now has every filter, multi-select and bulk assign; lead detail has assign/reassign. **A2.4** exit transfer follows your rule (D-026), with a preview before you confirm. **A2.5** audit coverage table in `04-access-control.md`.
+- **Migration 0007 to apply:** `set_user_scopes`, `move_leads`, and a trigger that moves a project's leads when its location changes. Then `npm run db:types`.
+- Tests: `npm run test:territory` (pure rules + live). Everything that needs 0007 SKIPS until it is applied; nothing that needs it has been run yet.
+- **For Arisha:** bulk selection is in `components/shared/selection.tsx` and the assignment core is `lib/leads/assign.ts` + `public.move_leads()`. Read D-027 before B2.1 — the "target must be able to read the lead" guard is trivially true and the real risk is different.
+- **For everyone:** `callRpc()` in `lib/supabase/rpc.ts` is how to call a database function before the types know it.
+
+### 2026-09-20 — user management (A1.1–A1.4)
+- Built: `/users` list (role filter, name search, deactivated greyed), `/users/new`, `/users/[id]` (edit, deactivate with open-lead count first, reactivate), `/users/hierarchy` (tree with rolled-up lead counts). Actions in `actions/org.ts`; logic in `lib/org/` (pure, tested).
+- **Migrations to apply: `0005_lead_counts_by_owner` and `0006_hierarchy_rebuild_where`. Then everyone runs `npm run db:types`.**
+- **Bug found and fixed (D-025):** `app.rebuild_hierarchy()` from 0001 does a bare DELETE, which Supabase's pg_safeupdate rejects for API sessions — so any real createUser or re-parent would have failed. Only worked in the seed because the SQL editor is exempt.
+- The service key is now allowed in ONE file (D-023). It goes in your `.env.local` only; nobody else needs it.
+- Assumptions to confirm are listed in D-024 (admin reports to super_admin; no second super_admin; can't deactivate someone with active reports; transfer target chosen by you until A2.4).
+- Tests: `npm run test:org` — 59 pass, 3 skipped until 0005/0006 are applied and the service key is supplied.
+- Next: apply migrations, run the real create/ban test, then Week 2 (A2.1 territory editor).
+
+### 2026-09-19 (evening) — shared core landed
+- **Migrations 0001–0004 applied, seed loaded, 8 test users created.** `npm run db:types` done — pull `main` and run it (or take `src/types/database.ts` from `main`).
+- **Shared core is finished and tested.** `actions/leads.ts` (getLeads, getLead, updateCallStatus, addRemark), `DataTable`, `leadColumns`, `LeadFilters`, `LeadDetailShell`, `LeadSummary`, `ActivityTimeline`, `LeadSources`, URL param helpers. Read `brain/SHARED-CORE.md` — it has the exact contracts and a recipe for building a list + detail screen.
+- Reference screens: `/leads` and `/leads/[id]` (admin). Copy the shape.
+- Tests: `npm run db:test` (14 access checks) and `npm run test:leads` (45 data-layer checks) both pass against the shared project.
+- Fixed a real bug on the way: zod 4 `uuid()` rejected the seed project ids, which would have broken every project filter.
+- Not done: row selection for bulk reassign (Arisha, B2.2), SLA countdown (Arisha B2.4 / Tanishka C1.3).
+- Next: gate call Thu 25 Sep, then Week 1 (A1.1 user list).
 
 ### 2026-09-19
 - Unpacked the scaffold; created the Next.js 16 app, shadcn, all runbook dependencies. Builds clean.

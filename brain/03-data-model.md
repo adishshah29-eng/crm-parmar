@@ -182,7 +182,7 @@ UNIQUE `(user_id, work_date)`.
 ### `audit_log`
 | id | uuid PK |
 | actor_id | uuid → users |
-| action | text | `view_lead \| edit_lead \| reassign \| export \| login` |
+| action | text | `view_lead \| edit_lead \| reassign \| export \| login \| user_create \| user_update \| user_reactivate \| user_deactivate \| scope_change \| project_create \| project_update \| location_create \| location_update \| import \| password_force_reset \| password_change` (plain text, so new actions need no migration) |
 | entity_type / entity_id | text / uuid |
 | meta | jsonb |
 | created_at | timestamptz |
@@ -208,3 +208,16 @@ pipeline_stage:   enquiry, qualified, site_visit_scheduled, site_visit_done,
 availability_status: available, on_site_visit, off
 visit_status:     scheduled, done, no_show, cancelled
 ```
+
+## Functions exposed through the API
+
+| Function | Migration | What |
+|---|---|---|
+| `public.lead_counts_by_owner()` | 0005 | `(owner_id, total, open)` per lead owner. SECURITY INVOKER, so RLS decides which leads are counted. "Open" = stage is not `booked` or `dropped`. Authenticated users only |
+| `public.set_user_scopes(user, projects[], locations[])` | 0007, fixed in 0009 | Replaces a manager's whole territory in one transaction. SECURITY DEFINER; its first statement refuses everyone but the super_admin (that check is the permission boundary) |
+| `public.move_leads(moves jsonb, reason, restart_sla)` | 0007 | Moves leads between owners in one transaction, writing `assignments` and a notification per move. Admins for manual/escalation, super_admin for exit_transfer |
+| `public.import_leads_batch(import, source, campaign, rows jsonb)` | 0008 | Applies the ingestion rules of `05-lead-flow.md` to up to 500 rows in one transaction, each row in its own subtransaction so one bad row is an error and never poisons the batch. Updates the `imports` counters and `error_report`. Admins only |
+| `public.dashboard_counts(range)` | 0010 | jsonb of the dashboard numbers (`total_leads`, `untouched`, `escalations_today`, `unassigned`, `unassigned_live`, `site_visits_week`). SECURITY INVOKER, so RLS decides what each role counts. `range` = `today` or `all` and changes ONLY `total_leads` (D-035) |
+| `public.dashboard_portfolios(range)` | 0010 | jsonb array, one entry per ACTIVE manager the caller may see: leads owned by them or anyone below them (split by stage), untouched, callers, visits booked. SECURITY INVOKER |
+
+Trigger `projects_sync_lead_location` (0007): when `projects.location_id` changes, every lead of that project gets the new `location_id`.

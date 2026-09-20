@@ -1,35 +1,20 @@
 # Sayli — task backlog
 
-**Portal:** Not a portal. Attendance, geofencing, site visits and the company dashboard — things every role touches, owned in one place so three portals do not each build their own.
+**Portal:** Not a portal. Attendance, geofencing and site visits — things every role touches, owned in one place so three portals do not each build their own.
 
 Blocked on Adish's shared core.
 
----
-
-## Week 1 (26 Sep – 2 Oct) — the company dashboard
-
-### D1.1 — Dashboard · `app/(app)/dashboard/page.tsx`
-What Gautam sees on opening the app, in his own words:
-
-1. **Total leads**
-2. **Working portfolio of every manager** — a row per manager, lead count split by stage
-3. Untouched leads right now
-4. Escalations today
-5. Site visits this week
-
-Plus the **today / all-time toggle** he asked for specifically — a control at the top, not a filter buried in a menu.
-
-Static numbers this week; wire them up in Week 2.
-
-### D1.2 — Manager portfolio rows
-Per manager: total, by stage, untouched, site visits booked, callers under them. Click through to that manager's leads.
-
-### D1.3 — Role-scoped dashboards
-Same page, different scope, decided by RLS rather than by branching in your code: super_admin and admin see the company, a manager sees their territory, a caller is redirected to My Day.
+> **Changed 2026-09-20 (D-034): the company dashboard moved to Adish.** Tasks D1.1, D1.2, D1.3, D2.3 and D2.4 are no longer yours; they are in `adish-tasks.md` under "Dashboards". Your Week 1 was entirely the dashboard, so it is now free: **your first task is attendance (D2.1, D2.2)**, ahead of the Week 2 date. It feeds lead routing, so it is the most useful thing to have early. Adish builds the dashboards during the prep week, before your work starts.
 
 ---
 
-## Week 2 (3 – 9 Oct) — attendance and live data
+## Week 1 (26 Sep – 2 Oct) — attendance (was the dashboard)
+
+Start with D2.1 and D2.2 below. Nothing else is assigned to this week.
+
+---
+
+## Week 2 (3 – 9 Oct) — attendance
 
 ### D2.1 — Check in / out · `actions/ops.ts`
 Browser geolocation with the timestamp. One row per person per day — the unique constraint exists, so handle the repeat gracefully rather than showing a Postgres error.
@@ -38,14 +23,6 @@ Browser geolocation with the timestamp. One row per person per day — the uniqu
 
 ### D2.2 — Attendance views
 Own for everyone, team for managers and sub_managers, everything for admins. RLS scopes it — do not filter by role in the query.
-
-### D2.3 — Dashboard on live data
-`getDashboard({ range: 'today' | 'all' })`.
-
-Aggregate in **SQL**, not JavaScript. Pulling every lead into Node to count them is slow and burns the 5 GB egress allowance. Write `app.dashboard_counts(range)` if the query gets long.
-
-### D2.4 — Engine panel
-Unassigned count, escalations today, leads queued for 10:30. Show the night queue explicitly as "waiting for 10:30" so nobody thinks those leads are lost.
 
 ---
 
@@ -78,7 +55,7 @@ Week view, scoped by role. Managers see their territory's visits.
 ---
 
 ## Week 4 (17 – 20 Oct)
-The dashboard is the first thing the business sees every morning. Spend the week on it: ₹ formatted in lakhs and crores rather than raw digits, clean alignment, skeletons rather than spinners. Then test everything at 375px.
+Hardening only. Test attendance, the site visit flows and the geofence prompt at 375px, on a real phone, with a real GPS fix — location behaves differently indoors and in a desktop simulator. Fix whatever is awkward.
 
 ---
 
@@ -86,4 +63,4 @@ The dashboard is the first thing the business sees every morning. Spend the week
 - **You own** attendance, availability records, geofences, site visits.
 - **Arisha owns** the availability *switch* in the manager top bar; you own what it writes and how routing reads it. Agree the shape in Week 1.
 - **Tanishka and Arisha** display your site visits on their lead screens; you build the objects and the flows.
-- Dashboard counts come from your own SQL, not from three portals each computing their own.
+- **Adish's dashboard reads your data.** "Site visits this week", site visits booked per manager, and the engine panel come from the `site_visits`, `attendance` and `geofences` tables. Keep their columns stable, and tell Adish in `team/sayli.md` before you change one.

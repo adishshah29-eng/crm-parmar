@@ -16,7 +16,7 @@ Read these, in this order, every session:
 
 - **Never invent schema.** If a table or column is not in `brain/03-data-model.md`, it does not exist. Ask.
 - **Never change the database from the Supabase dashboard.** All schema changes are migration files in `supabase/migrations/`. See `brain/workflow/migrations.md`.
-- **Never bypass row-level security.** No `service_role` key in application code. Ever.
+- **Never bypass row-level security.** No `service_role` key in application code, with ONE documented exception: `src/lib/supabase/admin.ts` (D-023), which administers login accounts only (create, ban, unban, set a temporary password, set or clear the forced-password-change flag) and never touches a table. If you think you need the key anywhere else, stop and ask.
 - **Never guess business rules.** Working hours, SLA timings, role permissions and status values are all written down. If something is not written down, stop and ask the human — do not decide for them.
 - **One feature branch per task.** See `brain/workflow/git-practices.md`. Always pull `main` before branching.
 

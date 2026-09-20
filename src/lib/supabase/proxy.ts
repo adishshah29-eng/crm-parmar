@@ -1,9 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
+import { allowedWhileFlagged, mustResetPassword } from "@/lib/auth-flags";
 
 /** Paths reachable without a session. Everything else requires login. */
-const PUBLIC_PATHS = ["/login", "/reset-password"];
+const PUBLIC_PATHS = ["/login", "/reset-password", "/auth/confirm"];
 
 const isPublic = (pathname: string) =>
   PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -62,6 +63,16 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "?error=deactivated";
+    return NextResponse.redirect(url);
+  }
+
+  // A super admin can require a password change (task A3.4). Until it is done, the only places a
+  // flagged user can reach are the change-password page and the auth callback. Because the proxy
+  // sees every request, this also stops a flagged session from calling server actions elsewhere.
+  if (mustResetPassword(user) && !allowedWhileFlagged(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/set-password";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

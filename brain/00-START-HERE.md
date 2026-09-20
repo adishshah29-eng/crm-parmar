@@ -19,6 +19,7 @@ This folder is the brain of the project. Everything an AI agent or a new develop
 | `IMPLEMENTATION-PLAN.md` | Who builds what, in which week |
 | `PHASE-0-RUNBOOK.md` | Adish's step-by-step setup, blocks everyone |
 | `tasks/<name>-tasks.md` | Your ticket-level backlog |
+| `workflow/team-playbook.md` | **Start here if you are building a portal:** setup, the daily loop, the per-task loop, traps already hit, and your first days |
 | `workflow/git-practices.md` | How to branch, commit, push, review |
 | `workflow/migrations.md` | How to change the database safely |
 | `workflow/definition-of-done.md` | When a task is actually finished |

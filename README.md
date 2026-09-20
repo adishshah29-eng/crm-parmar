@@ -12,7 +12,12 @@ git clone <repo-url> && cd parmar-crm
 npm install
 cp .env.example .env.local     # keys from Adish
 npm run dev
-npm run db:test                # access tests; needs the seed loaded
+npm run db:test                # RLS access tests; needs the seed loaded
+npm run test:leads             # lead data-layer tests (mutates one mock lead, restores it)
+npm run test:org               # user-management tests (temporarily deactivates caller3, restores it)
+npm run test:territory         # territories, projects, assignment, exit transfer (restores what it changes)
+npm run test:admin             # import, export, audit viewer, password reset (imports mock rows and deletes them)
+npm run test:dashboard         # dashboard numbers vs an independent recount, and each role's scope
 ```
 
 ## Layout

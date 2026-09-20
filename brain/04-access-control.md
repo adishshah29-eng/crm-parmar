@@ -6,7 +6,7 @@ The most dangerous file in the repo. Read it fully before touching any policy.
 
 Supabase serves Postgres over HTTP. Any holder of the anon key can query tables directly with `curl`, bypassing every line of React you write. **Filtering in the frontend is not security — it is decoration.** All access rules are enforced by row-level security in the database.
 
-The `service_role` key bypasses RLS entirely. It must never appear in application code, in a Next.js server action, in a route handler, or in any env var prefixed `NEXT_PUBLIC_`. Its only legitimate use is local migration tooling.
+The `service_role` key bypasses RLS entirely. It must never appear in application code, in a Next.js server action, in a route handler, or in any env var prefixed `NEXT_PUBLIC_`. Its legitimate uses are local migration/test tooling and ONE server-only file, `src/lib/supabase/admin.ts` (D-023), which can only create, ban and unban login accounts, set a temporary password, and set or clear the forced-password-change flag (D-023, D-031). It is never used to read or write a table — those go through the session client so RLS applies. `import "server-only"` makes the build fail if a client component ever imports it.
 
 ## Visibility matrix
 
@@ -107,3 +107,25 @@ are **not** enforced in the database yet — they live in the `reassign` server 
 ## Audit
 
 Log `view_lead` on detail-page open, not on list queries — logging every list row would swamp the table on the free tier's 500 MB limit. Log every `export`, `reassign`, `delete` and `login` without exception.
+
+## Audit coverage (task A2.5)
+
+`logAudit(supabase, actorId, action, entityType, entityId, meta?)` in `src/lib/audit.ts`. It never throws: an audit failure must not break the action, but it is logged. **Never log list queries** — that table would outgrow the leads on a 500 MB tier.
+
+| Action | Written when | entity | meta |
+|---|---|---|---|
+| `login` | successful sign-in | user | — |
+| `view_lead` | lead detail opened (only if the lead is readable) | lead | — |
+| `edit_lead` | call outcome saved, remark added | lead | `change` |
+| `reassign` | one lead assigned or reassigned; ONE row per bulk batch | lead | `to`, `reason`, and `bulk`, `requested`, `moved` for batches |
+| `user_create` / `user_update` / `user_reactivate` / `user_deactivate` | user administration | user | role, parent, or transfer count |
+| `scope_change` | a manager's territory saved | user (the manager) | project and location ids |
+| `project_create` / `project_update` | project created or edited | project | name, location, active |
+| `location_create` / `location_update` | location created or edited | location | name, city |
+| `export` | leads exported to CSV. Written BEFORE any data is returned; if it cannot be written the export is refused | leads (no id) | `rowCount`, `filters` |
+| `import` | a CSV import finished (or was stopped) | import | `filename`, `totalRows`, `inserted`, `duplicates`, `errors` |
+| `password_force_reset` | super admin required a password change | user | `temporary` (never the password) |
+| `password_change` | someone changed their own password | user | — |
+| `delete` | **not built yet** — no delete action exists | — | — |
+
+The viewer is `/audit` (A3.3): exports first, then the whole log filterable by actor, action and date.

@@ -8,12 +8,14 @@ Work is split by **who uses the screen**, not by frontend and backend. Each pers
 
 | Developer | Builds for | Owns |
 |---|---|---|
-| **Adish** | Foundation, then super_admin + admin | Repo, schema, RLS, migrations, login, **the shared core**, users, hierarchy, territories, all-leads view, import, export, audit |
+| **Adish** | Foundation, then super_admin + admin | Repo, schema, RLS, migrations, login, **the shared core**, users, hierarchy, territories, all-leads view, import, export, audit, **the dashboards** |
 | **Arisha** | Manager + sub_manager | Territory lead list, team roster, reassignment, escalation inbox, availability & delegation, team performance |
 | **Tanishka** | Caller | My Day, lead detail, call outcomes, follow-ups, buyer history, own performance — mobile first |
-| **Sayli** | Everyone, cross-cutting | Company dashboard, attendance, geofencing, site visits |
+| **Sayli** | Everyone, cross-cutting | Attendance, geofencing, site visits |
 
 Sayli's work is deliberately not a portal: attendance, geofencing and site visits are used by every role, so one person owns them across the system.
+
+**The dashboards moved from Sayli to Adish on 2026-09-20 (D-034).** Adish builds them while the others are still in prep, before their work starts; the tasks are in `tasks/adish-tasks.md`. Sayli's Week 1 is therefore free, so her first task is attendance.
 
 Adish also owns migrations for everyone: anyone may write one, only he applies it.
 
@@ -64,7 +66,7 @@ Arisha, Tanishka, Sayli this week:
 | **Adish** | User management: create/edit/deactivate, assign parent. Hierarchy tree. Super_admin only. |
 | **Arisha** | Territory lead list, mine-vs-team toggle, team roster with live counts. Sub_manager view verified. |
 | **Tanishka** | My Day list ordered by what needs attention now. Lead detail read-only, tap-to-dial, SLA countdown. Tested on a real phone. |
-| **Sayli** | Company dashboard with the five numbers and the today/all-time toggle, static data. Manager portfolio rows. |
+| **Sayli** | Attendance check-in/out with GPS, pulled forward from Week 2 because the dashboard moved to Adish. |
 
 Shared: agree component patterns in `07-ui-conventions.md` by Mon 29 Sep so four people do not invent four button styles.
 
@@ -77,7 +79,7 @@ Shared: agree component patterns in `07-ui-conventions.md` by Mon 29 Sep so four
 | **Adish** | Territory editor with overlap warnings. All-leads admin view. Exit transfer. Audit logging wired in. |
 | **Arisha** | Reassign with the visibility guard, bulk reassign, escalation inbox, SLA countdown in the list. |
 | **Tanishka** | Call outcome form with all mandatory-field rules. Activity timeline. Quick remark. |
-| **Sayli** | Attendance check-in/out with GPS, role-scoped attendance views, dashboard on live SQL counts. |
+| **Sayli** | Role-scoped attendance views; finish attendance if any of it is left. |
 
 **Mid-point review, Thu 9 Oct:** all four demo on the shared database. Anything more than three days behind gets cut from v1 here, not in the last week.
 

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Bell } from "lucide-react";
 import type { ReactNode } from "react";
 import { requireUser } from "@/lib/auth";
@@ -39,6 +40,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             <button type="button" aria-label="Notifications" className="rounded-md p-2 text-muted-foreground hover:bg-muted">
               <Bell className="size-4" />
             </button>
+            <Link href="/set-password" className="hidden text-sm text-muted-foreground underline-offset-2 hover:underline sm:inline">
+              Change password
+            </Link>
             <SignOutButton />
           </div>
         </header>
