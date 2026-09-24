@@ -35,6 +35,35 @@ _(anything the other three should know: a pattern you established, a gotcha you 
 
 Newest at the top. One entry per working session.
 
+### 2026-09-24 — performance design for 20,000 leads
+- New brain file: **`10-performance.md`** (added to the read order in `00-START-HERE.md`). What is
+  slow, why, and the order to fix it in. Read it before Week 2 work — Phase B changes the RLS
+  policies everyone's screens sit on.
+- **The three biggest causes are not about data volume**, which is why the app already feels slow
+  at 42 leads: (1) no `vercel.json`, so functions run in Washington while the database is in
+  Mumbai — ~230 ms per round trip, six round trips a page; (2) the proxy and the page each fetch
+  the user twice over, four trips for two facts; (3) `revalidatePath("/", "layout")` on every
+  saved outcome purges the whole app's cache.
+- **The 20,000-row killer is the `leads_select` policy.** `can_read_lead(id)` is SECURITY DEFINER,
+  so it is never inlined, and it re-reads by primary key the row Postgres already has, calling
+  three more SECURITY DEFINER helpers inside. Six sub-plans a row, run across the whole filtered
+  set because we ask for `count: "exact"`. It also stops the planner using the `assigned_to`,
+  `project_id` and `location_id` indexes at all.
+- **Warning for whoever writes migration 0011** (proposed SQL is in the file, nothing applied):
+  flattening that policy naively **leaks every caller their manager's whole territory**.
+  `my_scope_projects()` resolves upward through ancestors, and today only the `caller` branch in
+  `can_read_lead` stops it being consulted. Carry that branch across or the caller role is gone.
+  Gate: all fourteen access tests, the six manual ones, plus a new negative test for exactly this.
+- Also found: **no index on `leads.created_at`**, which is the default sort — every list query
+  sorts the whole visible set for 25 rows. And search is `ilike '%x%'`, which no btree can serve;
+  `pg_trgm` GIN indexes fix it with no application change.
+- **Four decisions I need from Gautam** before Phase C (listed at the end of the file): JWT
+  staleness vs. instant deactivation, exact vs. approximate row counts, the 20,000 export cap now
+  that it is the whole database, and page size.
+- Nothing measured yet, and that is the first task: we have 42 leads. Step zero in the file is a
+  20,000-row seed, because measuring as `postgres` bypasses RLS and will tell you everything is fast.
+- Installed the `system-design` skill at `.claude/skills/system-design/`.
+
 ### 2026-09-20 (final) — dashboards built
 - **D1.1–D2.4 built:** `/dashboard` with the four headline numbers, a Today / All-time toggle at the top, the lead-routing panel (admins), and every manager's portfolio by stage. Counted in SQL: **migration 0010** (`dashboard_counts`, `dashboard_portfolios`). **Apply it, then `npm run db:types`.**
 - Meaning of every number, and what the toggle changes: **D-035**. Assumptions to confirm are marked there (Monday week start, portfolio = own + team leads, default range Today, unassigned untouched leads counted).
