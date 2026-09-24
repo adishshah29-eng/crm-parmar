@@ -14,7 +14,13 @@ import type { BulkAssignInput, ReassignInput } from "@/lib/schemas/assign";
 // add the "within your own scope" rule; do not write a second path to leads.assigned_to.
 
 const SIGN_IN_AGAIN = "Please sign in again.";
-const refresh = () => revalidatePath("/", "layout");
+
+/** Same narrowing as src/actions/leads.ts refresh() — see the comment there (brain/10-performance.md, P0-3). */
+const refresh = () => {
+  revalidatePath("/leads", "layout");
+  revalidatePath("/dashboard");
+  revalidatePath("/my-day", "layout");
+};
 
 export async function reassign(input: ReassignInput): Promise<ActionResult<null>> {
   const user = await getCurrentUser();

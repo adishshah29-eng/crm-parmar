@@ -35,6 +35,33 @@ _(anything the other three should know: a pattern you established, a gotcha you 
 
 Newest at the top. One entry per working session.
 
+### 2026-09-24 (later) — Phase A of the performance plan
+- **`vercel.json`** added, pinning Vercel functions to `bom1` (Mumbai) instead of the default
+  `iad1` (Washington). Takes effect on the next deploy; nothing to measure locally.
+- **`revalidatePath("/", "layout")` removed** from `src/actions/leads.ts` and
+  `src/actions/assignment.ts` — it was purging the whole app's router cache on every saved call
+  outcome, remark, reassign and bulk assign. Both now narrow to `/leads` (layout, covers
+  `/leads/[id]`), `/dashboard`, `/my-day` (layout). `org.ts`'s two refresh functions were already
+  scoped correctly and needed no change. **For Arisha:** when `/team/leads` (B1.1) lands, add it to
+  the `refresh()` list in both files — it's shared by every portal on purpose, don't add a third copy.
+- **Reference-data caching (projects/sources/users) investigated, not built.** `"use cache"` and
+  `unstable_cache` both refuse to read `cookies()` inside the cached scope, and our Supabase client
+  needs the session cookie even for the `using (true)` tables, so the honest version caches
+  per-session, not cross-user — a fraction of the win it looks like. The real version wants the
+  JWT-claims work already queued in `10-performance.md` Phase C. Written up in P2-7 so nobody
+  rediscovers this mid-sprint. Small session-scoped version is still available if anyone wants it
+  sooner, at the cost of a bit of complexity for a partial win — I'd rather wait for Phase C.
+- **`supabase/tools/seed-bulk.ts` built** (`npm run db:seed-bulk`, needs `SUPABASE_SERVICE_ROLE_KEY`
+  same as `create-test-users.mjs`). Inserts up to 20,000 mock leads on top of the existing seed —
+  phones start `+9199` so they're identifiable and reversible (`--clean` removes them). Spreads
+  across all 6 projects, the 6 non-admin seeded users as owners plus 15% unassigned, dates over the
+  last year (80% recent), and a realistic mix of touched/untouched/SLA-breached so the indexes and
+  filters in Phase B actually get exercised rather than flattered. **Not run yet against the shared
+  project** — whoever runs it, say so here first, it's 20,000 rows everyone's dev session will see.
+- `npx tsc --noEmit`, `eslint` on the touched files, and `next build` all clean.
+- Baseline numbers for the five budgets in `10-performance.md` are still outstanding — need the
+  bulk seed run first, then measured as `authenticated`, not as `postgres` (P0's own step zero).
+
 ### 2026-09-24 — performance design for 20,000 leads
 - New brain file: **`10-performance.md`** (added to the read order in `00-START-HERE.md`). What is
   slow, why, and the order to fix it in. Read it before Week 2 work — Phase B changes the RLS

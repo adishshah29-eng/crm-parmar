@@ -24,9 +24,14 @@ Measured server-side, p95, on a database holding 20,000 leads.
 Everything below is read off the code and the query plans it implies. **None of it is measured**,
 because there is nothing yet to measure. Before any fix lands:
 
-1. **Seed 20,000 leads** (`supabase/tools/seed-bulk.ts`, mock data, same shape as the real import).
-   Spread them across projects, locations and owners the way the business actually does, or the
-   plans will lie.
+1. **Seed 20,000 leads** (`supabase/tools/seed-bulk.ts` — built, not yet run against the shared
+   project). Mock data only, phones starting `+9199` so it is identifiable and reversible
+   (`--clean` removes exactly those rows). Spread across projects, owners, dates, touched/untouched
+   and SLA state, so the plans below are exercised rather than flattered. Needs the service_role
+   key, same rule as `create-test-users.mjs`: a local tool, never deployed, never committed.
+   `SUPABASE_SERVICE_ROLE_KEY=<key> npm run db:seed-bulk`. **Whoever runs this against the shared
+   project should say so in their team file first** — it adds 20,000 rows four people's dev
+   sessions will now see.
 2. **Measure as a real user, not as `postgres`.** The `postgres` role bypasses RLS entirely and
    every query will look fast. Use `set local role authenticated` with the JWT claims set, then
    `explain (analyze, buffers)`.
@@ -44,7 +49,7 @@ Re-measure after every phase. A fix that does not move a number is not a fix.
 Ranked by impact divided by cost. The first three have nothing to do with 20,000 rows — they are
 why the app feels slow **today**, at 42.
 
-### P0-1 · The app and the database are on opposite sides of the planet
+### P0-1 · The app and the database are on opposite sides of the planet — done
 
 There is no `vercel.json`, so Vercel puts the functions in its default region (`iad1`, Washington).
 Supabase is in Mumbai, on purpose and unchangeably (`PHASE-0-RUNBOOK.md` step 5). Every database
@@ -60,6 +65,9 @@ second of pure network before a byte of HTML exists, and no amount of SQL tuning
 
 One file. Almost certainly the single biggest production win available, and it is invisible in
 local development — which is why nobody has noticed it yet.
+
+**Done, 2026-09-24.** `vercel.json` added at the repo root. Takes effect on the next Vercel deploy;
+nothing to measure locally, since region only matters once functions run on Vercel's infrastructure.
 
 ### P0-2 · Six serialised round trips before the first byte
 
@@ -90,19 +98,28 @@ is a business call about risk, not an engineering one: see *Open decisions* belo
 Cheap interim step, no decision required: narrow the proxy matcher so it does not run its
 `is_active` query on paths that cannot leak anything.
 
-### P0-3 · Every write throws away the entire cache
+### P0-3 · Every write throws away the entire cache — done
 
-`src/actions/leads.ts`:
+`src/actions/leads.ts` and `src/actions/assignment.ts` both had:
 
 ```ts
 const refresh = () => revalidatePath("/", "layout");
 ```
 
-That purges the router cache for the **whole application** on every saved call outcome and every
-remark. A caller logging forty outcomes a day re-fetches every screen forty times. The app behaves
-as though caching does not exist, which is exactly how "it feels slow" is described.
+That purges the router cache for the **whole application** on every saved call outcome, remark,
+reassignment and bulk assign. A caller logging forty outcomes a day re-fetches every screen forty
+times. The app behaves as though caching does not exist, which is exactly how "it feels slow" is
+described.
 
-Revalidate the paths that actually changed (`/my-day`, `/leads`, the detail route). Three lines.
+**Done, 2026-09-24.** Both narrowed to `revalidatePath("/leads", "layout")` (covers `/leads/[id]`),
+`revalidatePath("/dashboard")`, `revalidatePath("/my-day", "layout")`. `org.ts`'s two refresh
+functions were already scoped correctly (`/users`, `/territories`, `/leads` — not `/`) and did not
+need this; `"/", "layout"` was the only actual instance of the bug.
+
+One coordination note for whoever builds the next lead-visible route: `refresh()` in both files is
+explicitly shared by every portal, so extend the list there — don't add a third copy. `/team/leads`
+(Arisha, B1.1) doesn't exist yet, so it isn't in the list yet; add it in the same PR that creates
+the route.
 
 ### P1-4 · The RLS policy re-reads the row it was handed, 20,000 times
 
@@ -208,11 +225,35 @@ create index on public.persons using gin (phone     gin_trgm_ops);
 Trigram indexes need three characters to work with, which is already what `filteredLeads` enforces
 (`digits.length >= 3`). That was a lucky accident; keep it deliberately.
 
-### P2-7 · Reference data is re-fetched on every render
+### P2-7 · Reference data is re-fetched on every render — investigated, not done
 
 `/leads` loads all projects, all sources and every active user on each page view, to fill three
-dropdowns that change perhaps weekly. Cache them with a tag and invalidate the tag from the
-project, source and user mutations. Same for `/my-day` and the team screens once they exist.
+dropdowns that change perhaps weekly. Smaller than it looks once measured (a few dozen rows,
+against a 20,000-row leads query on the same page), which is why it is P2 — but worth writing down
+why the obvious fix doesn't drop in cleanly, so nobody re-discovers this the hard way mid-sprint.
+
+**The obvious tool doesn't fit.** Next 16's `"use cache"` directive, and its predecessor
+`unstable_cache`, both refuse to read `cookies()`/`headers()` inside the cached function — the
+call fails outright (`next-request-in-use-cache`), not silently. Our Supabase server client reads
+the session cookie to authenticate, and even `projects`/`sources`/`locations` — whose RLS policy is
+`using (true)`, same result for every signed-in user — still require *some* valid session token to
+hit PostgREST as `authenticated` rather than `anon`. So the token has to be read outside the cached
+scope and passed in as an argument — and because a token is part of the cache key by default,
+that produces one cache entry **per session**, not one shared across all 8–50 users. Real, but a
+fraction of the win it looks like.
+
+**The bigger tool doesn't fit either.** `"use cache"` requires `cacheComponents: true` in
+`next.config.ts`, which is not a local flag — it turns on Partial Prerendering as the default for
+every route in the app. That is a whole-app behavioural change needing its own testing pass across
+every portal, not a Phase A drive-by.
+
+**Left for later, on purpose:** once the JWT-claims work in P0-2 exists, the access token stops
+being a moving target (it is populated once per login, not re-derived per request), and caching
+this reference data cross-user stops fighting the same constraint. Do it then, not now.
+
+If someone wants the interim, session-scoped version sooner: it is a real, if partial, win — say so
+in your team file before building it, since it touches the same files (`org.ts`) as ongoing
+territory work.
 
 ### P2-8 · `OFFSET` paging and exact counts
 
@@ -256,10 +297,14 @@ plus `lead_activities` growth is also the point where 500 MB stops being roomy.
 
 **Phase A — no schema, no decisions, half a day.** Do this first; it is most of the felt slowness.
 
-1. `vercel.json` pinning `bom1`.
-2. Narrow `revalidatePath` to the routes that changed.
-3. Cache projects / sources / users behind tags.
-4. Build the 20,000-row seed and record baseline numbers for all five budgets.
+1. ~~`vercel.json` pinning `bom1`.~~ **Done, 2026-09-24.**
+2. ~~Narrow `revalidatePath` to the routes that changed.~~ **Done, 2026-09-24.**
+3. ~~Cache projects / sources / users behind tags.~~ **Investigated, not done** — see P2-7. The
+   real cross-user version needs the JWT work in Phase C; doing the session-scoped interim version
+   is optional and small, not blocking.
+4. ~~Build the 20,000-row seed.~~ **Script built** (`supabase/tools/seed-bulk.ts`), **not yet run**
+   against the shared project — needs the service_role key, so whoever runs it should say so in
+   their team file first. Baseline numbers for all five budgets are still outstanding until it is.
 
 **Phase B — migration 0011, Adish only, gated on the access tests.** The 20,000-row work.
 
