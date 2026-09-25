@@ -453,9 +453,9 @@ before their Week 2 work, not after.
 Per `00-START-HERE.md` rule 3, these are the human's to make. Written here so they are asked, not
 assumed; they become a `D-0xx` entry in `08-decisions.md` once answered.
 
-1. **JWT staleness.** If role and `is_active` ride in the token, a deactivated user keeps working
+1. **JWT staleness. ANSWERED 2026-09-25 (D-038): deactivation must be instant, so `is_active` never goes in the token; it is enforced live in the database (migration 0014).** Role claims for speed remain possible. (Original question: If role and `is_active` ride in the token, a deactivated user keeps working
    until it refreshes — up to an hour. Acceptable, or must deactivation stay instant? (If it must
-   stay instant, P0-2 is solved by the interim step only, and P0-1 carries that phase.)
+   stay instant, P0-2 is solved by the interim step only, and P0-1 carries that phase.))
 2. **Exact row counts.** **Answered 2026-09-25 (D-037): exact for every role.** After Phase B the
    exact count costs a few ms, so nothing is traded away.
 3. **Export cap — ANSWERED 2026-09-25 (D-037): keep 20,000, narrow the filters.** (Original question:** `EXPORT_MAX_ROWS` (20,000)

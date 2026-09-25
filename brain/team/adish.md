@@ -35,6 +35,12 @@ _(anything the other three should know: a pattern you established, a gotcha you 
 
 Newest at the top. One entry per working session.
 
+### 2026-09-25 (design audit) — audit and plan; deactivation was not instant, now fixed (0014)
+- Installed the proyecto26 system-design skills (user level, not in the repo) and audited the system: `brain/11-system-design-audit.md` (score 22/35, weakest area failure handling; ranked findings F-1..F-10 and a five-phase plan to ship on 20 Oct).
+- **Real gap found and fixed (F-10, D-038):** "deactivate" only signed the person out of the portal. The database kept serving them for the life of their token (up to an hour) to direct API calls. Reproduced with a test, fixed in **migration 0014** (restrictive `active_only` policy on every table; role helpers return nothing for an inactive user). **Apply it: `npx supabase db push`, then `npm run db:test` (now 16 checks; 15 and 16 cover this).** **New rule for everyone: every new table gets an `active_only` restrictive policy.**
+- Answers recorded (D-038): phones are a primary device; about 14-15k leads a year; production on AWS (how and when open, options in section 11 of the audit); instant deactivation means `is_active` never goes in a JWT.
+- **Audit growth decided (D-039): one `view_lead` row per person per lead per day**, enforced by a trigger, **migration 0015**, check 17. **AWS timing decided (D-040): production comes after go-live; real leads wait for it.** Apply **0013, 0014, 0015** in one go: `npx supabase db push`, then `npm run db:test` (17 checks).
+
 ### 2026-09-25 (perf) — Phase B done: lead read rules made fast (migrations 0011, 0012)
 - `/leads` timed out (57014) at 20,042 leads from the bulk seed below. **0011:** `leads_select` written inline with `(select ...)` InitPlans instead of the per-row `can_read_lead(id)`; new index `leads(created_at desc, id)`. **0012:** persons / lead_sources / activities / assignments read as `EXISTS` on `leads` (RLS applies inside, so it is `leads_select` itself); new index `leads(person_id)`. **Apply both: `npx supabase db push`.** Access is unchanged; the caller trap in the performance branch's warning is handled (`my_role() is distinct from 'caller'` guards the scope branches). Decision: D-036.
 - Measured as each role (20k leads): admin count 4.7 s to 73 ms; admin page 6.9 s to 1.8 s; caller page 1.5 s; manager page 8 s (timeout) before 0012. Caller1 sees exactly its 2,890 assigned leads, so no territory leak.

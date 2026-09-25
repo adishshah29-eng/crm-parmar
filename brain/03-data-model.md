@@ -221,3 +221,13 @@ visit_status:     scheduled, done, no_show, cancelled
 | `public.dashboard_portfolios(range)` | 0010 | jsonb array, one entry per ACTIVE manager the caller may see: leads owned by them or anyone below them (split by stage), untouched, callers, visits booked. SECURITY INVOKER |
 
 Trigger `projects_sync_lead_location` (0007): when `projects.location_id` changes, every lead of that project gets the new `location_id`.
+
+## Access rules added after the first RLS migration (0011-0015)
+
+| What | Migration | Behaviour |
+|---|---|---|
+| Policy `leads_select` | 0011 | Same visibility as `app.can_read_lead()`, written inline with `(select ...)` so it is evaluated once per query, not per row. Scope branches are guarded by `my_role() is distinct from 'caller'` |
+| Policies `persons_select`, `lead_sources_select`, `activities_select`, `assignments_select` | 0011, 0012 | A row is visible if you are an admin, or if you can see its lead (`EXISTS` on `leads`, so RLS applies inside it) |
+| Indexes `leads(created_at desc, id)`, `leads(person_id)`, `persons` trigram on `phone` and `full_name` | 0011, 0012, 0013 | List order, joins, and `ilike '%x%'` search. 0013 uses `pg_trgm` in the `extensions` schema |
+| `app.is_active_user()` and restrictive policy `active_only` on EVERY table | 0014 | An inactive user gets no rows and no writes, instantly, whatever their token says. `users` lets them read only their own row, for the proxy. `app.my_role()`, `is_admin()`, `is_super()` return nothing for an inactive user. **Every new table must add `active_only`** |
+| Trigger `audit_view_once_per_day` on `audit_log` (function `app.audit_view_once_per_day`), index `audit_log_view_lead_idx` | 0015 | Drops a `view_lead` row if the same person already viewed the same lead on the same IST day. Other actions untouched |

@@ -211,6 +211,57 @@ async function main() {
   const { count: admCount } = await adm.c.from('leads').select('id', { count: 'exact', head: true });
   check('14. admin sees all leads', admCount === all.length, `${admCount ?? 0} of ${all.length}`);
 
+  // 15 — instant deactivation (migration 0014). The person signs in FIRST and keeps their still-valid
+  // session; only then is is_active flipped. No ban, no sign-out: exactly the hour-long window the
+  // proxy alone cannot close. Restored in `finally`, so an interrupted run never strands the account.
+  const c3 = await signIn('caller3@parmar.test');
+  const { count: c3Before } = await c3.c.from('leads').select('id', { count: 'exact', head: true });
+  try {
+    const { error: offErr } = await sup.c.from('users').update({ is_active: false }).eq('id', c3.id);
+    if (offErr) throw new Error(`could not deactivate caller3: ${offErr.message}`);
+
+    const { data: seenLeads, error: seenErr } = await c3.c.from('leads').select('id').limit(5);
+    const { data: ownRow } = await c3.c.from('users').select('id, is_active').eq('id', c3.id).maybeSingle();
+    const { data: others } = await c3.c.from('users').select('id').neq('id', c3.id).limit(5);
+    const { data: persons } = await c3.c.from('persons').select('id').limit(5);
+    const { error: rpcErr } = await c3.c.rpc('lead_counts_by_owner');
+    const { data: rpcRows } = await c3.c.rpc('lead_counts_by_owner');
+    const { data: upd } = await c3.c.from('leads').update({ notes: 'should not land' }).eq('assigned_to', c3.id).select('id');
+    check(
+      '15. a deactivated user with a still-valid session is locked out of the database at once',
+      (c3Before ?? 0) > 0 && !seenErr && (seenLeads ?? []).length === 0 && (persons ?? []).length === 0 &&
+        (others ?? []).length === 0 && (upd ?? []).length === 0 && !rpcErr && (rpcRows ?? []).length === 0 &&
+        ownRow?.is_active === false,
+      `had ${c3Before} leads; now sees ${(seenLeads ?? []).length} leads, ${(persons ?? []).length} people, ${(others ?? []).length} other users; own row readable for the proxy: ${ownRow?.is_active === false}`
+    );
+  } finally {
+    await sup.c.from('users').update({ is_active: true }).eq('id', c3.id);
+  }
+  const { count: c3After } = await c3.c.from('leads').select('id', { count: 'exact', head: true });
+  check('16. reactivating restores access straight away', (c3After ?? 0) === (c3Before ?? -1), `${c3After} leads again`);
+
+  // 17 — audit: one view_lead row per person per lead per day (migration 0015, D-039). audit_log is
+  // append-only, so this leaves at most one row per test lead per day, however often it is run.
+  const viewA = ownedBy(c1.id)[0];
+  const viewB = ownedBy(c1.id)[1];
+  const startOfDayIst = new Date(Date.now() + 5.5 * 3600e3);
+  startOfDayIst.setUTCHours(0, 0, 0, 0);
+  const sinceIst = new Date(startOfDayIst.getTime() - 5.5 * 3600e3).toISOString();
+  const viewRows = async (leadId) => {
+    const { count } = await sup.c.from('audit_log').select('id', { count: 'exact', head: true })
+      .eq('action', 'view_lead').eq('actor_id', c1.id).eq('entity_id', leadId).gte('created_at', sinceIst);
+    return count ?? 0;
+  };
+  const logView = (leadId) => c1.c.from('audit_log').insert({ actor_id: c1.id, action: 'view_lead', entity_type: 'lead', entity_id: leadId });
+  const e1 = (await logView(viewA.id)).error; const e2 = (await logView(viewA.id)).error; const e3 = (await logView(viewA.id)).error;
+  const e4 = (await logView(viewB.id)).error; const e5 = (await logView(viewB.id)).error;
+  const [nA, nB] = [await viewRows(viewA.id), await viewRows(viewB.id)];
+  check(
+    '17. opening the same lead repeatedly in a day writes ONE view_lead row; another lead gets its own',
+    !e1 && !e2 && !e3 && !e4 && !e5 && nA === 1 && nB === 1,
+    `3 opens of lead A -> ${nA} row, 2 opens of lead B -> ${nB} row, inserts ok: ${![e1, e2, e3, e4, e5].some(Boolean)}`
+  );
+
   console.log('');
   const failed = results.filter((r) => !r.passed);
   if (failed.length) {

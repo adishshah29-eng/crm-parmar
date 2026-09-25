@@ -115,7 +115,7 @@ Log `view_lead` on detail-page open, not on list queries — logging every list 
 | Action | Written when | entity | meta |
 |---|---|---|---|
 | `login` | successful sign-in | user | — |
-| `view_lead` | lead detail opened (only if the lead is readable) | lead | — |
+| `view_lead` | lead detail opened (only if the lead is readable). **At most ONE row per person per lead per IST day** (trigger, migration 0015, D-039): opening the same lead again the same day writes nothing new | lead | — |
 | `edit_lead` | call outcome saved, remark added | lead | `change` |
 | `reassign` | one lead assigned or reassigned; ONE row per bulk batch | lead | `to`, `reason`, and `bulk`, `requested`, `moved` for batches |
 | `user_create` / `user_update` / `user_reactivate` / `user_deactivate` | user administration | user | role, parent, or transfer count |
