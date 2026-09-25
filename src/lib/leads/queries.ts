@@ -79,14 +79,17 @@ async function teamIds(supabase: Client, userId: string): Promise<string[]> {
 /** Strip characters that would break PostgREST's or() syntax or act as wildcards. */
 const cleanName = (s: string) => s.replace(/[^\p{L}\p{N}\s.'-]/gu, "").trim();
 
-// persons is an inner join so the search can filter on it.
-const LIST_SELECT = [
-  "id, project_id, call_status, temperature, pipeline_stage, is_live, assigned_to",
-  "first_touch_at, last_activity_at, next_call_at, sla_due_at, sla_breached_at, created_at",
-  "persons!inner(full_name, phone)",
-  "projects(name)",
-  "owner:users!leads_assigned_to_fkey(full_name)",
-].join(", ");
+// persons is an INNER join only when searching (the search filters on it). Otherwise it is a plain
+// join: the exact count then never has to visit persons, and persons_select re-checks the lead for
+// every joined row. Measured at 20k leads as a manager: inner 1.4-1.7 s, plain 75 ms, same count.
+const listSelect = (searching: boolean) =>
+  [
+    "id, project_id, call_status, temperature, pipeline_stage, is_live, assigned_to",
+    "first_touch_at, last_activity_at, next_call_at, sla_due_at, sla_breached_at, created_at",
+    searching ? "persons!inner(full_name, phone)" : "persons(full_name, phone)",
+    "projects(name)",
+    "owner:users!leads_assigned_to_fkey(full_name)",
+  ].join(", ");
 
 /**
  * Applies every filter the user chose to the leads table. Shared by the list screen and the export,
@@ -150,11 +153,14 @@ export async function queryLeads(
   const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE;
   const [sortCol, sortDir] = (params.sort ?? "created_at:desc").split(":");
 
-  let { query: q } = await filteredLeads(supabase, userId, f, LIST_SELECT, true);
+  let { query: q } = await filteredLeads(supabase, userId, f, listSelect(!!f.search), true);
 
   const from = (page - 1) * pageSize;
+  // created_at is NOT NULL, and leaving out nullsFirst is what lets Postgres walk the
+  // leads(created_at desc, id) index instead of sorting every visible row (1.5 s vs 55 ms at 20k).
+  // The other sortable columns can be null, and there nulls go last.
   q = q
-    .order(sortCol, { ascending: sortDir === "asc", nullsFirst: false })
+    .order(sortCol, sortCol === "created_at" ? { ascending: sortDir === "asc" } : { ascending: sortDir === "asc", nullsFirst: false })
     .order("id") // stable paging when the sort column ties
     .range(from, from + pageSize - 1);
 

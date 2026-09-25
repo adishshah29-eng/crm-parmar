@@ -40,7 +40,7 @@ Newest at the top. One entry per working session.
 - Measured as each role (20k leads): admin count 4.7 s to 73 ms; admin page 6.9 s to 1.8 s; caller page 1.5 s; manager page 8 s (timeout) before 0012. Caller1 sees exactly its 2,890 assigned leads, so no territory leak.
 - **Tests made scale-safe:** `db:test` and `test:leads` assumed the 27-lead seed and the API's 1,000-row cap, so they failed once the bulk data was in (data, not a leak). They now page through every row and assert the real rule (a Pune lead is visible to Worli people only if it belongs to their team). `db:test` 14/14 and `test:leads` pass at 20,042 leads.
 - **Answered the performance open decisions (D-037):** export cap stays 20,000 (narrow the filters, export in parts); counts stay exact for every role (37-73 ms now). The other two are still open.
-- **Still to do from the handoff:** run `analyze public.leads;` and check `last_autoanalyze` (stale-statistics hypothesis), then re-run `npm run db:bench` to record the after numbers next to the baseline below.
+- **Handoff steps finished, numbers in `10-performance.md` ("After Phase B"):** ran `analyze`; `db:bench` as a manager went from timing out to 67 ms (list), 976 to 57 ms (detail), caller 46 ms. Two app fixes did most of it: no `nullsFirst` on the `created_at` sort (index was unusable, 1.5 s to 55 ms) and `persons` joined plainly unless searching (1.4 s to 75 ms). **Search (1.4 s, budget 600 ms) is fixed by migration 0013 (trigram indexes). Apply it: `npx supabase db push`, then `npm run db:bench`.**
 
 
 ### 2026-09-25 — restyle: shell and dashboard (Workroom look)

@@ -48,6 +48,29 @@ Re-measure after every phase. A fix that does not move a number is not a fix.
 
 ---
 
+## After Phase B — 2026-09-25 (migrations 0011, 0012 + two app changes)
+
+Same tool, same 20,042 leads, same users. Statistics refreshed (`analyze public.leads`).
+
+| Budget | Baseline | After |
+|---|---|---|
+| Manager `/leads` list, exact count (500 ms) | timeout 20/20, then 1,362 ms | **67 ms** |
+| Manager lead detail (400 ms) | 976 ms | **57 ms** |
+| Manager `/dashboard` (800 ms) | 343 ms | **60 ms** |
+| Caller `/leads` (500 ms) | 580 ms | **46 ms** |
+| Caller lead detail (400 ms) | n/a | **47 ms** |
+| Manager search by phone digits (600 ms) | 2,741 ms | 1,429 ms; **0013 (trigram) pending** |
+| Export, unfiltered | refused after 2.1 s (cap 20,000) | refused after 0.2 s, by design (D-037) |
+| Export, one project, 3,279 rows | 4.9 s | 2.9 s (budget 30 s) |
+
+What did it, in order of effect:
+1. **The sort.** `nullsFirst: false` on `created_at` stopped Postgres using the `leads(created_at desc, id)` index, so it sorted all ~14,000 visible rows: 1.5 s versus 55 ms. `created_at` is NOT NULL, so the option was pointless; it is now only applied to sortable columns that can be null.
+2. **The buyer join.** `persons!inner` made the exact count visit `persons` per lead (1.4-1.7 s). It is now a plain join except when searching.
+3. **0011 / 0012** (D-036): row-independent checks are once-per-query InitPlans; `persons`/`lead_sources`/activities/assignments read as `EXISTS` on `leads`; indexes on `leads(created_at desc, id)` and `leads(person_id)`.
+4. **Statistics.** Run `analyze public.leads;` after any large load (D-037 note).
+
+**The handoff's suggestion to drop `count: "exact"` (P2-8) was not needed**: with 1 to 3 in place the exact count costs a few ms for every role, so counts stay exact (D-037). Not yet re-measured: the P0 items (region, duplicate auth calls) need a real `bom1` deploy.
+
 ## Baseline measurements — 2026-09-25, pre-migration
 
 Measured with `supabase/tools/bench.ts` (`npm run db:bench`), signed in as `mgr.worli@parmar.test`
@@ -433,14 +456,14 @@ assumed; they become a `D-0xx` entry in `08-decisions.md` once answered.
 1. **JWT staleness.** If role and `is_active` ride in the token, a deactivated user keeps working
    until it refreshes — up to an hour. Acceptable, or must deactivation stay instant? (If it must
    stay instant, P0-2 is solved by the interim step only, and P0-1 carries that phase.)
-2. **Exact row counts.** May the list show an approximate total ("about 4,300") for non-admins, or
-   is an exact number required on every page?
-3. **Export cap — no longer hypothetical, confirmed live 2026-09-25.** `EXPORT_MAX_ROWS` (20,000)
+2. **Exact row counts.** **Answered 2026-09-25 (D-037): exact for every role.** After Phase B the
+   exact count costs a few ms, so nothing is traded away.
+3. **Export cap — ANSWERED 2026-09-25 (D-037): keep 20,000, narrow the filters.** (Original question:** `EXPORT_MAX_ROWS` (20,000)
    and the database's actual row count (20,042) have crossed: an unfiltered export is refused
    outright today, not merely slow. Someone needs to decide whether to raise the cap, require a
    narrower filter, or ship the streaming export (P2-9) before this comes up in real use — this is
    the one open decision on this list that is actively blocking something right now, not a Phase C
-   nice-to-have.
+   nice-to-have.)
 4. **Page size.** 25 rows. On a manager's desktop screen 50 costs nothing extra once P1-4 lands.
 
 ## Validation

@@ -28,14 +28,16 @@ export const EXPORT_MAX_ROWS = 20_000;
 
 const isAdmin = (a: Actor) => a.role === "super_admin" || a.role === "admin";
 
-const EXPORT_SELECT = [
-  "id, call_status, temperature, pipeline_stage, budget_min, budget_max, created_at, last_activity_at, next_call_at",
-  "persons!inner(full_name, phone, email)",
-  "projects(name)",
-  "owner:users!leads_assigned_to_fkey(full_name)",
-  // aliased so it cannot collide with the source-filter join that filteredLeads adds
-  "srcs:lead_sources(campaign, sources(name))",
-].join(", ");
+// Inner join on persons only when searching (see listSelect in queries.ts for why).
+const exportSelect = (searching: boolean) =>
+  [
+    "id, call_status, temperature, pipeline_stage, budget_min, budget_max, created_at, last_activity_at, next_call_at",
+    searching ? "persons!inner(full_name, phone, email)" : "persons(full_name, phone, email)",
+    "projects(name)",
+    "owner:users!leads_assigned_to_fkey(full_name)",
+    // aliased so it cannot collide with the source-filter join that filteredLeads adds
+    "srcs:lead_sources(campaign, sources(name))",
+  ].join(", ");
 
 type RawExportRow = {
   id: string;
@@ -103,7 +105,7 @@ export async function buildLeadsCsv(supabase: Client, actor: Actor, rawFilters: 
   const byId = new Map<string, RawExportRow>();
   let expected = 0;
   for (let from = 0; ; from += PAGE) {
-    const { query } = await filteredLeads(supabase, actor.id, filters, EXPORT_SELECT, from === 0);
+    const { query } = await filteredLeads(supabase, actor.id, filters, exportSelect(!!filters.search), from === 0);
     const { data, error, count } = await query
       .order("created_at", { ascending: false })
       .order("id") // stable paging
