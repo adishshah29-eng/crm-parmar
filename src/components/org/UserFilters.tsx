@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ALL_ROLES, ROLE_LABEL } from "@/lib/schemas/user";
 
 const selectCls =
-  "h-8 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-8 pointer-coarse:h-11 pointer-coarse:text-base rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 /** Role filter + name search for the users list. Edits the URL only; the server page re-renders. */
 export function UserFilters() {

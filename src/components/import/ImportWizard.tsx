@@ -27,7 +27,7 @@ import {
 export type SourceOption = { code: string; name: string; isLive: boolean };
 
 const selectCls =
-  "h-9 w-full rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-9 pointer-coarse:h-11 pointer-coarse:text-base w-full rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 const FIELD_LABEL: Record<ImportField, string> = {
   phone: "Phone number",
@@ -175,7 +175,7 @@ export function ImportWizard({ sources, projects }: { sources: SourceOption[]; p
       )}
 
       {stage === "choose" && (
-        <section className="max-w-xl space-y-4 rounded-lg border p-4">
+        <section className="max-w-xl space-y-4 rounded-2xl bg-card shadow-sm p-4">
           <h2 className="font-semibold">1. Choose the file</h2>
           <div className="space-y-1.5">
             <Label htmlFor="source">Where did these leads come from?</Label>
@@ -204,7 +204,7 @@ export function ImportWizard({ sources, projects }: { sources: SourceOption[]; p
       )}
 
       {stage === "map" && csv && mapping && (
-        <section className="space-y-4 rounded-lg border p-4">
+        <section className="space-y-4 rounded-2xl bg-card shadow-sm p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-semibold">2. Match the columns</h2>
             <span className="text-sm text-muted-foreground">
@@ -285,7 +285,7 @@ export function ImportWizard({ sources, projects }: { sources: SourceOption[]; p
             </div>
           )}
 
-          <div className="overflow-auto rounded-lg border">
+          <div className="overflow-auto rounded-2xl bg-card shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -329,7 +329,7 @@ export function ImportWizard({ sources, projects }: { sources: SourceOption[]; p
       )}
 
       {stage === "running" && (
-        <section className="max-w-xl space-y-3 rounded-lg border p-4" aria-live="polite">
+        <section className="max-w-xl space-y-3 rounded-2xl bg-card shadow-sm p-4" aria-live="polite">
           <h2 className="font-semibold">3. Importing…</h2>
           <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={progress.done} aria-valuemin={0} aria-valuemax={progress.total}>
             <div className="h-full bg-primary transition-all" style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />
@@ -345,22 +345,22 @@ export function ImportWizard({ sources, projects }: { sources: SourceOption[]; p
       )}
 
       {stage === "done" && (
-        <section className="max-w-xl space-y-3 rounded-lg border p-4">
+        <section className="max-w-xl space-y-3 rounded-2xl bg-card shadow-sm p-4">
           <h2 className="flex items-center gap-2 font-semibold">
             <CheckCircle2 className="size-5 text-green-700" aria-hidden /> {stoppedEarly ? "Stopped early" : "Import finished"}
           </h2>
           {summary ? (
             <>
               <dl className="grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-lg border p-3">
+                <div className="rounded-2xl bg-card shadow-sm p-3">
                   <dt className="text-xs text-muted-foreground">New leads</dt>
                   <dd className="text-2xl font-semibold">{summary.inserted.toLocaleString()}</dd>
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rounded-2xl bg-card shadow-sm p-3">
                   <dt className="text-xs text-muted-foreground">Duplicates</dt>
                   <dd className="text-2xl font-semibold">{summary.duplicates.toLocaleString()}</dd>
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rounded-2xl bg-card shadow-sm p-3">
                   <dt className="text-xs text-muted-foreground">Errors</dt>
                   <dd className="text-2xl font-semibold">{summary.errors.toLocaleString()}</dd>
                 </div>

@@ -30,7 +30,7 @@ type Props = {
 };
 
 const selectCls =
-  "h-8 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-8 pointer-coarse:h-11 pointer-coarse:text-base rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function LeadFilters({ projects, showOwnerScope = false, showUnassigned = false, owners, sources, showDates = false, className }: Props) {
   const router = useRouter();

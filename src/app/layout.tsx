@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -27,6 +28,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full flex flex-col">
         {children}
         <Toaster />
+        {/* Real-user timings (from the phones people actually use). No-op until Speed Insights is switched on for the project in Vercel, and off Vercel. */}
+        <SpeedInsights />
       </body>
     </html>
   );

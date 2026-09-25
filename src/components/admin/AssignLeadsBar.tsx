@@ -11,7 +11,7 @@ import { ROLE_LABEL } from "@/lib/schemas/user";
 import type { UserRole } from "@/types/action";
 
 const selectCls =
-  "h-8 min-w-48 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-8 pointer-coarse:h-11 pointer-coarse:text-base min-w-48 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export type Assignee = { id: string; fullName: string; role: UserRole };
 
@@ -46,7 +46,7 @@ export function AssignLeadsBar({ assignees }: { assignees: Assignee[] }) {
     });
 
   return (
-    <div className="sticky top-2 z-30 space-y-2 rounded-lg border bg-background p-3 shadow-sm" role="region" aria-label="Assign selected leads">
+    <div className="sticky top-2 z-30 space-y-2 rounded-2xl bg-card p-3 shadow-md" role="region" aria-label="Assign selected leads">
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>

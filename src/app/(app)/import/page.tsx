@@ -45,7 +45,7 @@ export default async function ImportPage() {
         ) : history.data.length === 0 ? (
           <EmptyState title="No imports yet" hint="Your first import will be listed here, with its error report." />
         ) : (
-          <div className="overflow-auto rounded-lg border">
+          <div className="overflow-auto rounded-2xl bg-card shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow>

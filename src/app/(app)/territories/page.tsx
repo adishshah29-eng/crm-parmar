@@ -46,7 +46,7 @@ export default async function TerritoriesPage() {
         {managers.data.length === 0 ? (
           <EmptyState title="No managers yet" hint="Create a manager on the Users page, then give them a territory here." />
         ) : (
-          <div className="overflow-auto rounded-lg border">
+          <div className="overflow-auto rounded-2xl bg-card shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -102,7 +102,7 @@ export default async function TerritoriesPage() {
           cities.map((city) => (
             <div key={city} className="space-y-1">
               <h3 className="text-sm font-semibold text-muted-foreground">{city}</h3>
-              <div className="overflow-auto rounded-lg border">
+              <div className="overflow-auto rounded-2xl bg-card shadow-sm">
                 <Table>
                   <TableHeader>
                     <TableRow>

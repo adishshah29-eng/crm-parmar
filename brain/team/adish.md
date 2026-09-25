@@ -35,6 +35,22 @@ _(anything the other three should know: a pattern you established, a gotcha you 
 
 Newest at the top. One entry per working session.
 
+### 2026-09-25 (phase 2) — the rules are now in the workflow, not just in my head
+- **For all three of you, read `brain/workflow/team-playbook.md` traps 16-24, step 5b, and the new speed section of `definition-of-done.md` before your first list screen.** Short version: page everything with `range()` (the API silently stops at 1,000 rows); join `persons` as an inner join only when you filter on it; never `nullsFirst` a NOT NULL sort column; new tables need the `active_only` policy; measure as a manager and a caller with `npm run db:bench` and put before/after in your PR.
+- **`npm run db:bench` is now a gate:** exits 1 if any budget is missed (list 500, detail 400, search 600, dashboard 800 ms). To add your screen, copy a block in `supabase/tools/bench.ts` (instructions in its header).
+- **A PR template** (`.github/pull_request_template.md`) now asks for roles checked, phone check, bench numbers and the migration checklist.
+- **`db:test` check 15** briefly switches caller3 off (about a second). If you are signed in as caller3 you are kicked out, so use caller1 or caller2 for your own testing.
+- **Gate result today:** all budgets met except search (1.5 s) until `0013` is applied.
+
+### 2026-09-25 (phase 1) — safety net, headers, loading states, phone sizing
+- **Errors:** `app/(app)/error.tsx` (inside the shell, so the sidebar stays and there is a "Try again"), `app/error.tsx`, `app/global-error.tsx`, `app/not-found.tsx`, all using `components/shared/RouteError.tsx`. Next 16.3 passes `retry`, not `reset`. The server error's real message is never shown; its `digest` is shown as a reference and logged.
+- **Loading:** a `loading.tsx` for every screen (13 of 13 now, were 2). Shapes in `components/shared/PageSkeletons.tsx`.
+- **Headers** in `next.config.ts` (checked on a production build): X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy (geolocation stays on for Sayli's check-in), HSTS; `X-Powered-By` removed. **No CSP yet** (needs a browser to tune; do report-only after the first deploy).
+- **Phone:** shared Button, Input, Select, menu items, tabs and the four filter bars are 44 px tall on touch screens only (desktop unchanged); native selects use 16 px text so iOS does not zoom. Tables and cards are white rounded cards. The rules are in `07-ui-conventions.md`.
+- **Speed Insights** added (`@vercel/speed-insights`): switch it on in Vercel (project, Speed Insights tab, Enable) once deployed. **Uptime check** added as `.github/workflows/uptime.yml`: set the repo variable `APP_URL` to switch it on (until then it does nothing). Confirm the existing keepalive run is green in the Actions tab.
+- **Not verified:** none of this has been looked at in a browser (the pane cannot open localhost). Please open `/dashboard`, `/leads`, `/leads/<id>`, `/users`, `/import` on your phone or with browser dev tools at 375 px. Build, tsc and lint pass; headers checked with curl.
+- New dependency: `@vercel/speed-insights`. Pull and run `npm install`.
+
 ### 2026-09-25 (design audit) — audit and plan; deactivation was not instant, now fixed (0014)
 - Installed the proyecto26 system-design skills (user level, not in the repo) and audited the system: `brain/11-system-design-audit.md` (score 22/35, weakest area failure handling; ranked findings F-1..F-10 and a five-phase plan to ship on 20 Oct).
 - **Real gap found and fixed (F-10, D-038):** "deactivate" only signed the person out of the portal. The database kept serving them for the life of their token (up to an hour) to direct API calls. Reproduced with a test, fixed in **migration 0014** (restrictive `active_only` policy on every table; role helpers return nothing for an inactive user). **Apply it: `npx supabase db push`, then `npm run db:test` (now 16 checks; 15 and 16 cover this).** **New rule for everyone: every new table gets an `active_only` restrictive policy.**

@@ -101,3 +101,12 @@ Web first, but callers will open this on a phone. Lead list and lead detail must
 - No client-side role filtering of lead lists
 - No new colour outside the palette above
 - No one-off table or badge implementations
+
+
+## Phone rules (added 2026-09-25, D-038: phones are a primary device)
+
+- **Touch targets:** the shared `Button`, `Input`, `Select`, dropdown items and tabs grow on touch screens by themselves (`pointer-coarse:` variants in `components/ui/*`). Use them; do not hard-code `h-8` on your own control. A native `<select>` or date input must carry `h-8 pointer-coarse:h-11 pointer-coarse:text-base` (16 px text stops iOS zooming the page when the field is focused).
+- **Cards** are `rounded-2xl bg-card p-5 shadow-sm`, not `rounded-lg border`. Coloured status boxes (amber warning, red error) keep their coloured border.
+- **Every route that fetches** has a `loading.tsx` (use `ListPageSkeleton` or `DetailPageSkeleton` from `components/shared/PageSkeletons.tsx`). Errors are handled by `app/(app)/error.tsx`, so a thrown error keeps the sidebar and offers "Try again"; do not catch errors just to show a blank state.
+- **Error boundaries in Next 16.3 receive `retry`, not `reset`.**
+- **Check every screen at 375 px and 768 px** (checklist: `11-system-design-audit.md` section 9).

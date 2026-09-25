@@ -73,7 +73,11 @@ Browser -> Vercel (`bom1`, Mumbai) -> Next.js Server Components and server actio
 
 Ship date is Mon 20 Oct 2026. Today is Thu 25 Sep (gate call).
 
-### Phase 1: Safety net, this week (Adish, 1-2 days, no schema)
+### Phase 1: Safety net, this week (Adish, 1-2 days, no schema): BUILT 2026-09-25, needs a look on a real phone
+
+Status of each item below: 1 done, 2 done, 3 done, 4 partly (0013 is yours to apply; the proxy change is deferred on purpose, see the note), 5 done in code (switch-on steps in the team log), 6 code-level pass done, visual pass is yours. Not done on purpose: a Content-Security-Policy (it can break the app in ways only a browser shows; do it in report-only mode after the first deploy). Phase 2 (playbook and definition of done) is not started.
+
+Note on item 4: with `0014` the database now refuses a deactivated user by itself, so the proxy's `is_active` lookup is only there to sign them out politely. Removing it needs the page to reuse the proxy's answer, otherwise a deactivated person is bounced between `/` and `/login`. That is F-6 and stays with Phase 4, where it can be measured on the real deployment instead of guessed at.
 1. F-1: `error.tsx`, `global-error.tsx`, `not-found.tsx`, route-level errors.
 2. F-3: `loading.tsx` for `/leads`, `/leads/[id]`, `/users`, `/territories`, `/my-day`, `/audit`, `/import`.
 3. F-8: security headers in `next.config.ts`.
@@ -81,7 +85,9 @@ Ship date is Mon 20 Oct 2026. Today is Thu 25 Sep (gate call).
 5. F-2: Speed Insights + uptime ping; confirm the keepalive Action is actually green.
 6. **Mobile pass** (section 9) over every existing screen; fix what breaks in the shared components once, so the three portals inherit it.
 
-### Phase 2: Bake it into how the team builds, before portals start (Adish, half a day)
+### Phase 2: Bake it into how the team builds, before portals start (Adish, half a day): BUILT 2026-09-25
+
+Done: playbook step 5b (measure it), section 4 (tests table and the 20k data note), section 5 (migration rules: `active_only`, index order, no function-of-row-id policies), traps 16-24, the Week 4 wording (AWS, D-040); `definition-of-done.md` (phone, loading/error, a speed section, database and RLS lines, three new "not done" excuses); a pull request template (`.github/pull_request_template.md`); and `db:bench` is now a real gate: it exits 1 if any budget is missed, discards a warm-up call so one cold request cannot fail it, and its header says how to add a screen. Current run: every budget met except search (1.5 s vs 600 ms), which needs migration `0013` applied.
 7. Add a **"Performance and phone rules"** page to the playbook (start from D-036 and the "rules that came out of the 20k measurements"): no `nullsFirst` on NOT NULL sorts, embed `persons` as an inner join only when filtering on it, no function-of-row-id in a policy, never page through more than 1,000 rows without `range`, tests must not assume the seed size.
 8. Add to `definition-of-done.md`: screen checked at 375 px and 1280 px; a `loading.tsx`; an `error.tsx` if the route fetches; a list query checked with `npm run db:bench`.
 9. `db:bench` is the regression gate: re-run after every phase, both numbers in the PR.

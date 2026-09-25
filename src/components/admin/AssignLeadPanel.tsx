@@ -11,7 +11,7 @@ import { ROLE_LABEL } from "@/lib/schemas/user";
 import type { Assignee } from "@/components/admin/AssignLeadsBar";
 
 const selectCls =
-  "h-9 w-full rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-9 pointer-coarse:h-11 pointer-coarse:text-base w-full rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 /** Assign or reassign ONE lead, from its detail page. Admin only. */
 export function AssignLeadPanel({
@@ -32,7 +32,7 @@ export function AssignLeadPanel({
   const options = assignees.filter((a) => a.id !== currentOwnerId);
 
   return (
-    <section className="space-y-3 rounded-lg border p-4" aria-label="Assign lead">
+    <section className="space-y-3 rounded-2xl bg-card shadow-sm p-4" aria-label="Assign lead">
       <h2 className="font-semibold">{currentOwnerId ? "Reassign" : "Assign"}</h2>
       <p className="text-sm text-muted-foreground">
         {currentOwnerId ? `Owned by ${currentOwnerName ?? "someone outside your view"}.` : "Nobody owns this lead yet."}

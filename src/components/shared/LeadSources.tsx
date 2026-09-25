@@ -7,7 +7,7 @@ import type { LeadSourceEntry } from "@/types/leads";
  */
 export function LeadSources({ sources }: { sources: LeadSourceEntry[] }) {
   return (
-    <section className="space-y-3 rounded-lg border p-4">
+    <section className="space-y-3 rounded-2xl bg-card shadow-sm p-4">
       <h2 className="font-semibold">Sources</h2>
       {sources.length === 0 ? (
         <p className="text-sm text-muted-foreground">No source recorded for this lead.</p>

@@ -79,9 +79,9 @@ export function DataTable<T extends { id: string }>({
       {rows.length === 0 ? (
         <EmptyState title={emptyTitle} hint={emptyHint} />
       ) : (
-        <div className="max-h-[70vh] overflow-auto rounded-lg border">
+        <div className="max-h-[70vh] overflow-auto rounded-2xl bg-card shadow-sm">
           <Table>
-            <TableHeader className="sticky top-0 z-20 bg-background shadow-[0_1px_0_var(--border)]">
+            <TableHeader className="sticky top-0 z-20 bg-card shadow-[0_1px_0_var(--border)]">
               <TableRow>
                 {selectable && (
                   <TableHead className="w-8">
@@ -175,7 +175,7 @@ export function DataTableSkeleton({ rows = 8 }: { rows?: number }) {
   return (
     <div className="space-y-3" aria-busy="true" aria-label="Loading leads">
       <Skeleton className="h-9 w-full max-w-md" />
-      <div className="space-y-2 rounded-lg border p-3">
+      <div className="space-y-2 rounded-2xl bg-card p-3 shadow-sm">
         {Array.from({ length: rows }).map((_, i) => (
           <Skeleton key={i} className="h-10 w-full" />
         ))}

@@ -75,7 +75,9 @@ One branch per task. If it will live longer than three days, split it.
 - recomputes expected numbers **independently** from raw rows;
 - **restores** whatever it changed, or uses clearly marked temporary rows.
 
-**5. Build the screen** from the shared pieces (recipe in `SHARED-CORE.md`). Every screen needs four states: loading (skeleton, not a spinner), empty (say what to do next), error (what failed and what to try), and no-access. Lead screens must work at **375px**.
+**5. Build the screen** from the shared pieces (recipe in `SHARED-CORE.md`). Every screen needs four states: loading (skeleton, not a spinner), empty (say what to do next), error (what failed and what to try), and no-access. Every screen must work at **375px and 768px**, because phones are a primary device (D-038). Give each route its own `loading.tsx` (`ListPageSkeleton` or `DetailPageSkeleton` in `components/shared/PageSkeletons.tsx`). Errors are caught by `app/(app)/error.tsx`, so do not write your own catch-and-blank. Use the shared `Button`, `Input`, `Select` and tabs: they grow to 44 px on touch screens by themselves. Rules in `07-ui-conventions.md`.
+
+**5b. Measure it (any screen that lists, searches or counts).** The shared database holds about 20,000 leads on purpose, so "it is fast on my machine" means something. Sign in as a **manager and a caller** (never only as admin: admin skips most of the access checks, so it flatters the numbers) and run `npm run db:bench`. Add your screen's query to `supabase/tools/bench.ts` by copying an existing block (`timeMany(...)` then `report(label, budgetMs, result)`). Budgets unless `10-performance.md` says otherwise: **list 500 ms, detail 400 ms, search 600 ms, dashboard 800 ms**. Put the before and after numbers in your PR. A query that is over budget is not done, and the fix is almost always in the traps below, not in more code.
 
 **6. Check it as every role that touches it**, not only the one you built for. Sign in as each seeded user and look.
 
@@ -104,10 +106,14 @@ All four of you share **one** database. Some suites briefly change shared mock d
 
 | Command | Changes data? | Who runs it |
 |---|---|---|
-| `npm run db:test` | trivially (one audit row) | anyone, any time |
+| `npm run db:test` | check 15 switches **caller3** off for about a second, then back on; it also writes at most 2 audit rows a day | anyone. If you are signed in as caller3 you are kicked out for a moment, so use caller1 or caller2 for your own testing |
 | `npm run test:leads` | edits one lead, restores it | say so in the team file first |
 | `npm run test:org`, `test:territory`, `test:admin`, `test:dashboard` | temporary users/leads/visits, restored | Adish, or ask |
 | your own `test:<area>` | yours | announce before running |
+
+| `npm run db:bench` | one audit row (its export step) | anyone; it is slow on purpose (a few iterations), do not loop it |
+
+The shared project holds **about 20,000 leads** (`npm run db:seed-bulk`; `-- --clean` removes them). Tests must not assume the 27-lead seed or that a query returns everything: the API returns at most **1,000 rows per request**, so read everything by paging with `range()`. After a large load, run `analyze public.leads;` in the SQL editor.
 
 When a test fails, read the message before rerunning. And **never run any of these against real data** (they are for the mock database only).
 
@@ -125,7 +131,9 @@ Nobody changes the database from the Supabase dashboard, ever. You **write** a m
    - **Every `DELETE`/`UPDATE` needs a `WHERE`** (Supabase blocks bare ones for API calls; even `where true` works).
    - A function that calls `app.*` helpers directly must be **`SECURITY DEFINER`** with its permission check as the first statement, or the API role can't run it.
    - `SECURITY INVOKER` is right for read-only counting: RLS then decides what each role counts.
-   - Index the foreign keys you filter on.
+   - Index the foreign keys you filter on, **and the column a list sorts by**. Index columns in the order the query sorts them, and do not pass `nullsFirst` for a NOT NULL column (it makes the index unusable: 1.5 s versus 55 ms, measured).
+   - **Every new table also gets the `active_only` restrictive policy** (copy it from `0014_deactivation_enforced_in_db.sql`). It is what locks a deactivated user out instantly; without it your table stays readable to them until their token expires. `db:test` check 15 must still pass.
+   - **Never write a policy or helper that is a function of the row id** (like `can_read_lead(id)`) for the common case: the database runs it once per row. Put anything that does not depend on the row in `(select ...)` so it runs once per query, and use `exists (select 1 from leads where ...)` to say "visible if its lead is visible".
 5. Say it in your team file (`Asking: @adish migration 0011 is merged, please apply`). He applies it and posts; then everyone runs `git pull` and `npm run db:types`.
 6. Until the generated types know a new function, call it with `callRpc()` from `src/lib/supabase/rpc.ts`.
 
@@ -148,6 +156,16 @@ Nobody changes the database from the Supabase dashboard, ever. You **write** a m
 13. **Status colours are fixed** (`07-ui-conventions.md`). One `StatusBadge`; no new colours; no private badges or tables.
 14. **Never commit** `.env.local`, `node_modules`, `.csv` files, or anything with a real phone number.
 15. **Editing files with regexes or backslashes through shell one-liners can silently drop the backslashes.** Use your editor (or the file tool) and re-read the result.
+16. **The API returns at most 1,000 rows per request**, silently. `select(...)` with no `range()` looks fine on 27 rows and quietly truncates on 20,000. Page with `range()` in loops of 1,000, or ask for a count.
+17. **Do not put thousands of ids in `.in(...)`.** The list becomes part of the URL and the request fails or returns nothing. Filter in the query, or send a slice.
+18. **Embed `persons` (or any joined table) as an inner join (`persons!inner(...)`) only when you filter on it.** As an inner join, the exact count has to visit every joined row: 1.4 s versus 75 ms for the same page. Use `persons(...)` otherwise. See `listSelect` in `lib/leads/queries.ts`.
+19. **Do not pass `nullsFirst` when ordering by a NOT NULL column** (like `created_at`). It stops Postgres using the index. Only nullable sort columns need it.
+20. **Never fetch "all the leads" and filter in the browser or in Node.** Every list is server-driven and paged (`DataTable`). At 15,000 new leads a year, "all" stops being a page.
+21. **Never show `error.message` to a user.** It can carry table and column names. Show a plain sentence; `RouteError` shows a short reference (`digest`) that is matched against the server log.
+22. **Next 16.3 error boundaries take `retry`, not `reset`** (older tutorials are wrong).
+23. **Do not assume the seed size in a test.** Assert the rule ("a Pune lead is visible only inside the team"), not the count. Read everything by paging (trap 16).
+24. **Deactivation is instant and enforced by the database.** A deactivated user's token still exists, but every table refuses them. Do not add a client-side "is this user active" check as a substitute, and never put `is_active` in a token.
+25. **A `FOR ALL` policy also filters reads.** `persons_write` (FOR ALL, `app.is_admin()` unwrapped) made counting people cost 1.9 s. Wrap anything that does not depend on the row in `(select ...)` in every policy on a table that can grow. Quick test: count the table unfiltered as admin and as a manager; it should cost about what counting `leads` costs (D-041).
 
 ---
 
@@ -217,4 +235,4 @@ No new features. Anything unfinished on 17 Oct is v2.
 - **Sun 19:** deploy to Vercel, real user list, still mock leads.
 - **Mon 20:** walkthrough with Gautam, then hand over.
 
-**Real client leads must not be loaded** until a separate production Supabase project exists on the Pro plan (D-009). There are no backups on the free tier.
+**Real client leads must not be loaded** anywhere until the AWS production database exists, with automated backups and point-in-time recovery (D-009, D-038, D-040). There are no backups on the free tier. On 20 Oct we go live on the tested Supabase setup with mock data only; AWS production follows, and the date real work starts is the date it is ready.

@@ -8,7 +8,7 @@ import { AUDIT_ACTIONS } from "@/lib/audit";
 import { actionLabel } from "@/lib/audit-log/labels";
 
 const selectCls =
-  "h-8 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-8 pointer-coarse:h-11 pointer-coarse:text-base rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 /** Actor, action and date filters for the audit log. Edits the URL only; the server page re-renders. */
 export function AuditFilters({ actors }: { actors: { id: string; name: string }[] }) {

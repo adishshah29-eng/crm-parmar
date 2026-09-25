@@ -62,6 +62,10 @@ Then open a PR on GitHub. In the description:
 - what it does, in two lines
 - which brain files you changed, if any
 - anything the other three need to know
+- if it lists, searches or counts: the `npm run db:bench` numbers before and after, as a manager and a caller
+- how you checked it at 375px (a real phone or browser dev tools)
+
+The PR template (`.github/pull_request_template.md`) fills these in for you.
 
 **Every PR needs one approval before merge.** Review rotation: Adish ↔ Arisha, Tanishka ↔ Sayli. If your reviewer is unavailable, ask anyone.
 

@@ -30,7 +30,7 @@ export function LeadDetailShell({
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       {backHref && (
-        <Link href={backHref} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <Link href={backHref} className="inline-flex items-center gap-1 py-1 text-sm text-muted-foreground hover:text-foreground pointer-coarse:py-2.5">
           <ArrowLeft className="size-4" aria-hidden />
           {backLabel}
         </Link>

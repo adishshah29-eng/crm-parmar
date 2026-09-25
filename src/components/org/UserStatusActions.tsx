@@ -12,7 +12,7 @@ import type { UserRole } from "@/types/action";
 import type { ParentOption } from "@/components/org/UserForm";
 
 const selectCls =
-  "h-9 w-full rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-9 pointer-coarse:h-11 pointer-coarse:text-base w-full rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 type Target = { id: string; fullName: string; role: UserRole; parentId: string | null; phone: string | null };
 

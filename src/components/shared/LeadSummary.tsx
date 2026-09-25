@@ -15,7 +15,7 @@ export function LeadSummary({ lead }: { lead: LeadDetail }) {
       : null;
 
   return (
-    <section className="space-y-3 rounded-lg border p-4">
+    <section className="space-y-3 rounded-2xl bg-card shadow-sm p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <h1 className="truncate text-xl font-semibold tracking-tight">{lead.personName ?? "Unnamed buyer"}</h1>

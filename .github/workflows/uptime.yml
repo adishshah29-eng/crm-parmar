@@ -1,0 +1,36 @@
+name: Uptime check
+
+# Is the deployed app up, and answering fast? Runs every 30 minutes through the working day
+# (about 09:30-20:00 IST, Mon-Sat; the schedule is in UTC). A failed run makes GitHub email the people watching the repo,
+# which is how we hear about an outage before Gautam does.
+#
+# Switched on by setting ONE repository variable: Settings -> Secrets and variables -> Actions ->
+# Variables -> APP_URL = https://<the deployed address>. Until it is set, this job does nothing.
+
+on:
+  schedule:
+    - cron: '*/30 4-14 * * 1-6'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request the login page
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "APP_URL is not set; nothing to check yet."
+            exit 0
+          fi
+          out=$(curl -s -o /dev/null -w "%{http_code} %{time_total}" --max-time 20 "${APP_URL%/}/login")
+          code=${out% *}
+          secs=${out#* }
+          echo "HTTP $code in ${secs}s"
+          if [ "$code" != "200" ]; then
+            echo "::error::The app answered HTTP $code (expected 200). It may be down or the database paused."
+            exit 1
+          fi
+          # A slow answer is a warning, not a failure: it shows up in the run log without paging anyone.
+          awk -v t="$secs" 'BEGIN { if (t > 3) print "::warning::Slow: " t " s to load /login (budget 3 s)" }'

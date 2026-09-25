@@ -45,7 +45,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
       ) : result.data.length === 0 ? (
         <EmptyState title="No users match" hint="Clear the search or the role filter." />
       ) : (
-        <div className="overflow-auto rounded-lg border">
+        <div className="overflow-auto rounded-2xl bg-card shadow-sm">
           <Table>
             <TableHeader>
               <TableRow>

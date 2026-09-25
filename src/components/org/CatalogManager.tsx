@@ -15,7 +15,7 @@ import type { Catalog } from "@/lib/org/territory";
 // leads and history point at these rows; a project can be made inactive instead.
 
 const selectCls =
-  "h-9 w-full rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-9 pointer-coarse:h-11 pointer-coarse:text-base w-full rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 export function CatalogManager({ catalog, cities, leadCounts }: { catalog: Catalog; cities: string[]; leadCounts: Record<string, number> }) {
   const listId = useId();
@@ -92,7 +92,7 @@ function LocationForm(
 
   return (
     <form
-      className="space-y-2 rounded-lg border p-3"
+      className="space-y-2 rounded-2xl bg-card shadow-sm p-3"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
@@ -164,7 +164,7 @@ function ProjectForm(
 
   return (
     <form
-      className="space-y-2 rounded-lg border p-3"
+      className="space-y-2 rounded-2xl bg-card shadow-sm p-3"
       onSubmit={(e) => {
         e.preventDefault();
         submit();

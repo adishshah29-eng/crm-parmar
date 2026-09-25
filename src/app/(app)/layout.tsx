@@ -42,12 +42,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 px-1 py-2 md:px-2">
-          <p className="text-sm text-muted-foreground">
+          <p className="min-w-0 truncate text-sm text-muted-foreground">
             Welcome back, <span className="font-medium text-foreground">{user.fullName.split(" ")[0]}</span>
           </p>
-          <div className="flex items-center gap-2 rounded-full bg-card p-1.5 pl-3 shadow-sm">
+          <div className="flex shrink-0 items-center gap-2 rounded-full bg-card p-1.5 pl-3 shadow-sm">
             {/* Bell is wired to notifications in Week 1. Unread count comes from getUnread(). */}
-            <button type="button" aria-label="Notifications" className="rounded-full p-1.5 text-muted-foreground hover:bg-muted">
+            <button type="button" aria-label="Notifications" className="rounded-full p-1.5 text-muted-foreground hover:bg-muted pointer-coarse:p-2.5">
               <Bell className="size-4" />
             </button>
             <Link href="/set-password" className="hidden text-sm text-muted-foreground underline-offset-2 hover:underline sm:inline">

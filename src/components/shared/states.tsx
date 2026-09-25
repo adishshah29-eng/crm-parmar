@@ -15,7 +15,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-10 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed p-10 text-center">
       <Inbox className="size-6 text-muted-foreground" aria-hidden />
       <p className="font-medium">{title}</p>
       {hint && <p className="max-w-sm text-sm text-muted-foreground">{hint}</p>}
@@ -51,7 +51,7 @@ export function NoAccess({
   message?: string;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border p-10 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-2xl bg-card shadow-sm p-10 text-center">
       <Lock className="size-6 text-muted-foreground" aria-hidden />
       <p className="font-medium">Not available</p>
       <p className="max-w-sm text-sm text-muted-foreground">{message}</p>

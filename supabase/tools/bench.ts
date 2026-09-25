@@ -6,7 +6,17 @@
 // which flatters the numbers exactly the way the postgres role would. Export is the one exception:
 // only admin/super_admin CAN export, so that budget is necessarily measured as admin.
 //
-//   npx tsx supabase/tools/bench.ts
+//   npx tsx supabase/tools/bench.ts        (npm run db:bench)
+//
+// It is the speed regression gate (team-playbook step 5b): it exits with status 1 if any budget is
+// missed, and prints "All budgets met." otherwise.
+//
+// HOW TO ADD YOUR SCREEN: find the block for the closest existing screen below (a manager or caller
+// list is the usual model) and copy it:
+//     const mine = await timeMany(ITERATIONS, () => queryMyThing(client, userId, { ... }));
+//     report("my screen (what it shows)", 500, mine);      // label, budget in ms, result
+// Use a manager or caller client, never admin (see above). Budgets: list 500, detail 400,
+// search 600, dashboard 800 (ms, p95).
 //
 // Needs .env.local. Mostly read-only: the export budget writes one real audit_log row if it
 // succeeds (exportLeadsWithAudit always audits a successful export — that's the point of it), so
@@ -57,6 +67,9 @@ async function timeMany(n: number, fn: () => Promise<{ ok: boolean; error?: unkn
   const samples: number[] = [];
   let failures = 0;
   const failureDetails: unknown[] = [];
+  // One untimed call first: the very first request pays for a cold connection and plan, which with
+  // only a handful of samples would become the p95 and make this gate fail for no real reason.
+  await fn();
   for (let i = 0; i < n; i++) {
     const start = performance.now();
     const res = await fn();
@@ -73,13 +86,17 @@ async function timeMany(n: number, fn: () => Promise<{ ok: boolean; error?: unkn
   return { samples, failures, failureDetails };
 }
 
+let missed = 0; // budgets over, or queries that failed every run: decides the exit status
+
 function report(label: string, budgetMs: number, result: { samples: number[]; failures: number; failureDetails: unknown[] }) {
   if (result.samples.length === 0) {
+    missed++;
     console.log(`FAIL  ${label.padEnd(38)} every run failed (${result.failures}) — ${JSON.stringify(result.failureDetails[0]).slice(0, 100)}`);
     return;
   }
   const s = stats(result.samples);
   const verdict = s.p95 <= budgetMs ? "OK  " : "OVER";
+  if (verdict === "OVER") missed++;
   const n = result.failures ? `  (${result.failures} failed, ${result.samples.length} ok)` : "";
   console.log(
     `${verdict} ${label.padEnd(38)} budget ${String(budgetMs).padStart(6)}ms  ` +
@@ -166,6 +183,7 @@ async function main() {
   const all = await exportLeadsWithAudit(admin.client, actor, {});
   const allMs = performance.now() - startAll;
   if (all.ok) {
+    if (allMs > 30_000) missed++;
     console.log(`${allMs <= 30_000 ? "OK  " : "OVER"} CSV export, unfiltered, ${all.data.rowCount} rows  budget 30000ms  actual ${allMs.toFixed(0)}ms`);
   } else {
     // Expected once the database has more leads than EXPORT_MAX_ROWS — see 10-performance.md
@@ -174,13 +192,25 @@ async function main() {
     const startOne = performance.now();
     const one = await exportLeadsWithAudit(admin.client, actor, { projectId: ["22222222-0000-0000-0000-000000000001"] });
     const oneMs = performance.now() - startOne;
-    if (one.ok) console.log(`        filtered to one project instead: ${one.data.rowCount} rows in ${oneMs.toFixed(0)}ms`);
-    else console.log(`        filtered export ALSO failed: ${one.error}`);
+    if (one.ok) {
+      if (oneMs > 30_000) missed++;
+      console.log(`        filtered to one project instead: ${one.data.rowCount} rows in ${oneMs.toFixed(0)}ms`);
+    } else {
+      missed++;
+      console.log(`        filtered export ALSO failed: ${one.error}`);
+    }
   }
 
   console.log("\nNote: this measures DB + RLS round-trip time from this environment, not a Vercel");
   console.log("deployment. P0-1 (region) and P0-2 (duplicate auth calls) are not reproducible here —");
   console.log("they need measuring after a real deploy to bom1.");
+
+  if (missed) {
+    console.log(`\n${missed} budget(s) missed.`);
+    process.exitCode = 1;
+  } else {
+    console.log("\nAll budgets met.");
+  }
 }
 
 main();

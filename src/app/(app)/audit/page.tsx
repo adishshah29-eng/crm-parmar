@@ -78,7 +78,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
         ) : exports.data.rows.length === 0 ? (
           <EmptyState title="No exports yet" hint="When an admin exports leads to CSV it appears here with who, when, how many leads and which filter." />
         ) : (
-          <div className="overflow-auto rounded-lg border">
+          <div className="overflow-auto rounded-2xl bg-card shadow-sm">
             <Table>
               <TableHeader>
                 <TableRow>

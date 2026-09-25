@@ -111,7 +111,7 @@ export function TerritoryEditor({
       {cities.length === 0 && <p className="text-sm text-muted-foreground">No locations exist yet. Add them under Projects &amp; locations first.</p>}
 
       {cities.map((city) => (
-        <fieldset key={city} className="space-y-3 rounded-lg border p-4">
+        <fieldset key={city} className="space-y-3 rounded-2xl bg-card shadow-sm p-4">
           <legend className="px-1 text-sm font-semibold">{city}</legend>
           {catalog.locations
             .filter((l) => l.city === city)

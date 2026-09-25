@@ -19,7 +19,7 @@ export function PasswordActions({ userId, fullName }: { userId: string; fullName
   const [pending, startTransition] = useTransition();
 
   return (
-    <section className="max-w-lg space-y-3 rounded-lg border p-4" aria-label="Password">
+    <section className="max-w-lg space-y-3 rounded-2xl bg-card shadow-sm p-4" aria-label="Password">
       <h2 className="font-semibold">Password</h2>
       <p className="text-sm text-muted-foreground">
         {fullName} can reset their own password from the sign-in page if email is set up. Otherwise, or if you need them to change it now,
