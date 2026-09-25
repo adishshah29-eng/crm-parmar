@@ -24,17 +24,19 @@ Measured server-side, p95, on a database holding 20,000 leads.
 Everything below is read off the code and the query plans it implies. **None of it is measured**,
 because there is nothing yet to measure. Before any fix lands:
 
-1. **Seed 20,000 leads** (`supabase/tools/seed-bulk.ts` — built, not yet run against the shared
-   project). Mock data only, phones starting `+9199` so it is identifiable and reversible
-   (`--clean` removes exactly those rows). Spread across projects, owners, dates, touched/untouched
-   and SLA state, so the plans below are exercised rather than flattered. Needs the service_role
-   key, same rule as `create-test-users.mjs`: a local tool, never deployed, never committed.
-   `SUPABASE_SERVICE_ROLE_KEY=<key> npm run db:seed-bulk`. **Whoever runs this against the shared
-   project should say so in their team file first** — it adds 20,000 rows four people's dev
-   sessions will now see.
-2. **Measure as a real user, not as `postgres`.** The `postgres` role bypasses RLS entirely and
-   every query will look fast. Use `set local role authenticated` with the JWT claims set, then
-   `explain (analyze, buffers)`.
+1. **Seed 20,000 leads — done, 2026-09-25.** `supabase/tools/seed-bulk.ts`, `npm run db:seed-bulk`.
+   Runs authenticated as `super@parmar.test` through ordinary RLS (`leads_insert`/`persons_write`
+   grant to `app.is_admin()`), **not** the service_role key — no reason to bypass RLS for an insert
+   admin already has. Mock data only, phones starting `+9199` so it is identifiable and reversible
+   (`--clean` removes exactly those rows, verified round-trip on a 50-row dry run first). Database
+   now holds **20,042 leads** (42 original + 20,000 new): ~25% untouched with an SLA clock running,
+   ~15% unassigned, ~8% of the untouched already SLA-breached, spread across all 6 projects and the
+   6 non-admin seeded users as owners.
+2. **Measure as a real user, not as `postgres` — or as `super_admin`.** The `postgres` role
+   bypasses RLS entirely, and `app.is_admin()` short-circuits `can_read_lead()` before it ever
+   reaches the descendant/scope subqueries P1-4 is about — both make every query look fast the
+   same way. Sign in (or `set local role authenticated` with the JWT claims set) as a **manager or
+   caller**, then `explain (analyze, buffers)`.
 3. **Measure `next build && next start`, never `next dev`.** Dev-mode recompilation is not app
    speed, and judging the app by it will send you chasing the wrong things.
 4. Supabase dashboard → **Query Performance** shows the real top-N by total time. Start there
@@ -302,9 +304,11 @@ plus `lead_activities` growth is also the point where 500 MB stops being roomy.
 3. ~~Cache projects / sources / users behind tags.~~ **Investigated, not done** — see P2-7. The
    real cross-user version needs the JWT work in Phase C; doing the session-scoped interim version
    is optional and small, not blocking.
-4. ~~Build the 20,000-row seed.~~ **Script built** (`supabase/tools/seed-bulk.ts`), **not yet run**
-   against the shared project — needs the service_role key, so whoever runs it should say so in
-   their team file first. Baseline numbers for all five budgets are still outstanding until it is.
+4. ~~Build and run the 20,000-row seed.~~ **Done, 2026-09-25** — the shared project now holds
+   20,042 leads. **Baseline numbers for the five budgets are still outstanding**: this seeded the
+   data, it did not measure anything (step zero above still applies — sign in as a manager or
+   caller, not `super_admin`). Whoever picks up Phase B should record them before the RLS migration,
+   not after, or there is nothing to compare against.
 
 **Phase B — migration 0011, Adish only, gated on the access tests.** The 20,000-row work.
 

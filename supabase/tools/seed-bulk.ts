@@ -12,12 +12,13 @@
 // doubled — this script cannot tell "no leads for this person yet" apart from "duplicate", so it
 // asks first.
 //
-// Needs the service_role key, same as create-test-users.mjs: this is the one place outside
-// src/lib/supabase/admin.ts (D-023) it is allowed — a local tool, never deployed, never committed,
-// read from an env var on the command line.
+// No service_role key needed, and deliberately not used: leads_insert, persons_write and
+// lead_sources_insert all grant to app.is_admin(), so this runs authenticated as super@parmar.test
+// through the SAME row-level security every request goes through — never bypassing it, per
+// 02-system-design.md's single most important rule. Needs .env.local (URL + anon key).
 //
-//   SUPABASE_SERVICE_ROLE_KEY=<key> npx tsx supabase/tools/seed-bulk.ts [count]
-//   SUPABASE_SERVICE_ROLE_KEY=<key> npx tsx supabase/tools/seed-bulk.ts --clean
+//   npx tsx supabase/tools/seed-bulk.ts [count]
+//   npx tsx supabase/tools/seed-bulk.ts --clean
 //
 // [count] defaults to 20000. Runs in batches of 500 so no single request holds the lot in memory
 // or trips a Postgres statement timeout.
@@ -122,11 +123,17 @@ async function main() {
 
   const env = readEnvLocal();
   const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url) { console.error("NEXT_PUBLIC_SUPABASE_URL missing from .env.local"); process.exit(1); }
-  if (!key) { console.error("Set SUPABASE_SERVICE_ROLE_KEY on the command line (see the header of this file)."); process.exit(1); }
+  if (!anonKey) { console.error("NEXT_PUBLIC_SUPABASE_ANON_KEY missing from .env.local"); process.exit(1); }
 
-  const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const db = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { error: signInErr } = await db.auth.signInWithPassword({ email: "super@parmar.test", password: "Test@12345" });
+  if (signInErr) {
+    console.error("Could not sign in as super@parmar.test:", signInErr.message);
+    console.error("This script writes through RLS as super_admin, not with the service_role key — the seeded test users must exist first.");
+    process.exit(1);
+  }
 
   // Resolve the seeded users by email — never hard-code an id, the project may have been reseeded.
   const { data: users, error: usersErr } = await db
@@ -263,9 +270,11 @@ async function main() {
   }
 
   console.log(`\nDone. ${inserted} mock leads inserted on top of the existing seed.`);
-  console.log("Next: measure as a real user, not this service-role client — RLS changes the plan.");
-  console.log("      explain (analyze, buffers) with `set local role authenticated` and the JWT claims set.");
-  console.log("      Clean up later with: SUPABASE_SERVICE_ROLE_KEY=<key> npx tsx supabase/tools/seed-bulk.ts --clean");
+  console.log("Next: measure signed in as a MANAGER or CALLER, not super_admin like this script.");
+  console.log("      app.is_admin() short-circuits can_read_lead() before it ever reaches the");
+  console.log("      descendant/scope subqueries P1-4 is about, so super_admin flatters the plan");
+  console.log("      exactly the way the postgres role would (10-performance.md, step zero).");
+  console.log("      Clean up later with: npx tsx supabase/tools/seed-bulk.ts --clean");
 }
 
 main();

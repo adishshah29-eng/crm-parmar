@@ -35,6 +35,26 @@ _(anything the other three should know: a pattern you established, a gotcha you 
 
 Newest at the top. One entry per working session.
 
+### 2026-09-25 — bulk seed run against the shared project
+- **The shared database now holds 20,042 leads** (the original 42 + 20,000 mock). Everyone's
+  `/leads`, `/dashboard` etc. will look very different next time you pull and run — this is
+  expected, not a bug. Bulk rows are `Bulk Buyer <n>` / phones `+9199…` / `bulk-buyer-<n>@example.test`,
+  easy to tell apart from the real seed.
+- **Changed the script's approach before running it**: it no longer wants the service_role key.
+  `leads_insert`/`persons_write`/`lead_sources_insert` already grant to `app.is_admin()`, so it
+  signs in as `super@parmar.test` and writes through ordinary RLS instead — no reason to reach for
+  the key that bypasses it when admin can already do the insert the normal way.
+- Did a 50-row dry run first (first time this script had touched a live database), verified the
+  distribution and the `--clean` round-trip, then ran the real 20,000. Final counts match the
+  intended distribution: ~25% untouched with an SLA clock, ~15% unassigned, ~8% of the untouched
+  already breached.
+- `.env.local` is in place on this machine (gitignored, not committed, not shared here).
+- **What's still not done: no baseline numbers.** Seeding is step zero, not the measurement.
+  Whoever picks up Phase B needs to measure the five budgets in `10-performance.md` **signed in as
+  a manager or caller** — `super_admin`'s `is_admin()` short-circuit flatters the RLS cost the same
+  way the `postgres` role does, so it would silently hide exactly what P1-4 is about.
+- `10-performance.md` step zero and the Phase A checklist updated to reflect all of the above.
+
 ### 2026-09-24 (later) — Phase A of the performance plan
 - **`vercel.json`** added, pinning Vercel functions to `bom1` (Mumbai) instead of the default
   `iad1` (Washington). Takes effect on the next deploy; nothing to measure locally.
