@@ -61,10 +61,26 @@ async function main() {
   const mp = await signIn('mgr.pune@parmar.test');
   const sub = await signIn('sub.worli@parmar.test');
 
+  // The API returns at most 1,000 rows a request, so "everything" has to be read page by page.
+  // (With 20k bulk leads loaded, a single select silently saw only the first 1,000.)
+  const fetchAll = async (page) => {
+    const out = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await page(from, from + 999);
+      if (error) throw new Error(`fetchAll: ${error.message}`);
+      out.push(...(data ?? []));
+      if (!data || data.length < 1000) return out;
+    }
+  };
+  const teamOf = async (uid) => {
+    const { data } = await sup.c.from('user_hierarchy').select('descendant_id').eq('ancestor_id', uid);
+    return new Set((data ?? []).map((r) => r.descendant_id));
+  };
+
   // ground truth, read as super_admin
-  const { data: all } = await sup.c
-    .from('leads')
-    .select('id, person_id, project_id, location_id, assigned_to, notes');
+  const all = await fetchAll((a, b) =>
+    sup.c.from('leads').select('id, person_id, project_id, location_id, assigned_to, notes').order('id').range(a, b)
+  );
   if (!all?.length) {
     console.error('No leads visible to super_admin — seed data missing. Stopping.');
     process.exit(1);
@@ -89,19 +105,24 @@ async function main() {
   check("2. caller cannot fetch another caller's lead by id", !stolenErr && (stolen ?? []).length === 0, 'zero rows, no error');
 
   // ------------------------------------------------------------ 3. manager blind outside territory
-  const { data: mwLeads } = await mw.c.from('leads').select('id, project_id, assigned_to');
-  const puneVisible = (mwLeads ?? []).filter((l) => l.project_id === PUNE_PROJECT);
+  const mwLeads = await fetchAll((a, b) => mw.c.from('leads').select('id, project_id, assigned_to').order('id').range(a, b));
   const mwTerritory = new Set([RAHEJA, '22222222-0000-0000-0000-000000000002']);
   const teamIds = new Set([mw.id, sub.id, c1.id, c2.id]);
-  const strays = (mwLeads ?? []).filter((l) => !mwTerritory.has(l.project_id) && !teamIds.has(l.assigned_to));
+  const strays = mwLeads.filter((l) => !mwTerritory.has(l.project_id) && !teamIds.has(l.assigned_to));
+  // A Pune lead may be visible ONLY because it belongs to someone in the Worli team. Any other
+  // Pune lead (owned by mgr.pune, caller3, or nobody) must be invisible, checked by id.
+  const outsidePune = all.filter((l) => l.project_id === PUNE_PROJECT && !teamIds.has(l.assigned_to));
+  const visibleIds = new Set(mwLeads.map((l) => l.id));
+  const leaked = outsidePune.filter((l) => visibleIds.has(l.id));
   check(
     '3. manager cannot see leads outside territory or team (Pune lead invisible)',
-    (mwLeads ?? []).length > 0 && puneVisible.length === 0 && strays.length === 0,
-    `${mwLeads?.length ?? 0} visible, ${puneVisible.length} Pune, ${strays.length} stray`
+    mwLeads.length > 0 && outsidePune.length > 0 && leaked.length === 0 && strays.length === 0,
+    `${mwLeads.length} visible, ${outsidePune.length} Pune leads outside the team, ${leaked.length} leaked, ${strays.length} stray`
   );
 
   // ------------------------------------------------------------ 4. manager sees in-territory lead owned by another manager
-  const managedByPune = ownedBy(mp.id)[0]; // a Raheja lead owned by mgr.pune
+  const managedByPune = ownedBy(mp.id).find((l) => mwTerritory.has(l.project_id)); // a Raheja lead owned by mgr.pune
+  if (!managedByPune) { console.error('No in-territory lead owned by mgr.pune. Re-run seed.sql.'); process.exit(1); }
   const { data: seen } = await mw.c.from('leads').select('id').eq('id', managedByPune.id);
   check(
     '4. manager sees an in-territory lead owned by another manager',
@@ -122,13 +143,16 @@ async function main() {
   );
 
   // ------------------------------------------------------------ 6. sub_manager inherits, sibling territory hidden
-  const { data: subLeads } = await sub.c.from('leads').select('id, project_id');
-  const inherits = (subLeads ?? []).some((l) => mwTerritory.has(l.project_id));
-  const subSeesPune = (subLeads ?? []).some((l) => l.project_id === PUNE_PROJECT);
+  // Territory leads are visible through the inherited scope; a Pune lead only if it belongs to the
+  // sub_manager's own team (themself and their callers), never through Pune's territory.
+  const subLeads = await fetchAll((a, b) => sub.c.from('leads').select('id, project_id, assigned_to').order('id').range(a, b));
+  const subTeam = await teamOf(sub.id);
+  const inherits = subLeads.some((l) => mwTerritory.has(l.project_id) && !subTeam.has(l.assigned_to));
+  const subPuneLeaks = subLeads.filter((l) => l.project_id === PUNE_PROJECT && !subTeam.has(l.assigned_to));
   check(
     '6. sub_manager sees parent territory and not a sibling manager\'s',
-    inherits && !subSeesPune,
-    `${subLeads?.length ?? 0} visible, inherits=${inherits}, pune=${subSeesPune}`
+    inherits && subPuneLeaks.length === 0,
+    `${subLeads.length} visible, inherits (territory lead outside own team)=${inherits}, Pune leaks=${subPuneLeaks.length}`
   );
 
   // ------------------------------------------------------------ extras
@@ -184,8 +208,8 @@ async function main() {
   check("13. caller cannot add activity to another caller's lead", actErr?.code === RLS_VIOLATION, actErr?.code ?? 'INSERT SUCCEEDED');
 
   // 14 — admin reads everything super_admin does
-  const { data: admLeads } = await adm.c.from('leads').select('id');
-  check('14. admin sees all leads', (admLeads ?? []).length === all.length, `${admLeads?.length ?? 0} of ${all.length}`);
+  const { count: admCount } = await adm.c.from('leads').select('id', { count: 'exact', head: true });
+  check('14. admin sees all leads', admCount === all.length, `${admCount ?? 0} of ${all.length}`);
 
   console.log('');
   const failed = results.filter((r) => !r.passed);

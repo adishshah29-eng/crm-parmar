@@ -39,6 +39,18 @@ function check(name: string, passed: boolean, detail = "") {
   if (!passed) failed++;
   console.log(`${passed ? "PASS" : "FAIL"}  ${name}${detail ? "  — " + detail : ""}`);
 }
+// The API returns at most 1,000 rows per request, so "read everything" must page. Without this the
+// tests only saw the first 1,000 leads and every "expected" figure was wrong once data grew.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchAll<T = any>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await page(from, from + 999);
+    if (error) throw new Error(`fetchAll: ${error.message}`);
+    out.push(...(data ?? []));
+    if (!data || data.length < 1000) return out;
+  }
+}
 const iso = (d: Date) => d.toISOString();
 const inDays = (n: number) => iso(new Date(Date.now() + n * 864e5));
 
@@ -67,9 +79,11 @@ async function main() {
   rule("whitespace-only remark does not count", { callStatus: "lost", remark: "   " }, false);
 
   // ------------------------------------------------ B. lists
-  const { data: all } = await sup.c.from("leads").select("id, assigned_to, person_id, first_touch_at, last_activity_at, call_status, temperature, pipeline_stage, next_call_at, renurture_at");
-  const mine = all!.filter((l) => l.assigned_to === c1.id);
-  const others = all!.filter((l) => l.assigned_to === c2.id);
+  const all = await fetchAll((a, b) =>
+    sup.c.from("leads").select("id, assigned_to, person_id, first_touch_at, last_activity_at, call_status, temperature, pipeline_stage, next_call_at, renurture_at").order("id").range(a, b),
+  );
+  const mine = all.filter((l) => l.assigned_to === c1.id);
+  const others = all.filter((l) => l.assigned_to === c2.id);
 
   const r1 = await queryLeads(c1.c, c1.id, {});
   check("caller list: only own leads, more than zero", r1.ok && r1.data.total === mine.length && r1.data.rows.length > 0 && r1.data.rows.every((x) => x.assignedTo === c1.id), r1.ok ? `${r1.data.total} rows` : r1.error);
@@ -79,7 +93,8 @@ async function main() {
   const r1c = await queryLeads(c1.c, c1.id, { pageSize: 3, page: 2 });
   const r1d = await queryLeads(c1.c, c1.id, { pageSize: 3, page: 3 });
   const pagedIds = [r1b, r1c, r1d].flatMap((r) => (r.ok ? r.data.rows.map((x) => x.id) : []));
-  check("paging: pages of 3 cover all rows with no duplicates", r1b.ok && r1b.data.rows.length === 3 && r1b.data.total === mine.length && pagedIds.length === mine.length && new Set(pagedIds).size === mine.length, `${pagedIds.length} ids over 3 pages`);
+  // Three full pages of 3, none repeated, and the total is the real total (holds at any data size).
+  check("paging: pages of 3 are full, disjoint, and the total is exact", r1b.ok && r1b.data.rows.length === 3 && r1b.data.total === mine.length && pagedIds.length === Math.min(9, mine.length) && new Set(pagedIds).size === pagedIds.length, `${pagedIds.length} ids over 3 pages, total ${r1b.ok ? r1b.data.total : "?"}`);
 
   const someone = r1.ok ? r1.data.rows[0] : null;
   const digits = someone ? someone.phone.slice(-5) : "";
@@ -113,9 +128,9 @@ async function main() {
 
   // admin: everything, and the source filter
   const ra = await queryLeads(adm.c, adm.id, { pageSize: 100 });
-  check("admin list: all leads", ra.ok && ra.data.total === all!.length, ra.ok ? `${ra.data.total} of ${all!.length}` : ra.error);
-  const { data: metaSrc } = await sup.c.from("lead_sources").select("lead_id, sources!inner(code)").eq("sources.code", "meta");
-  const metaIds = new Set((metaSrc ?? []).map((s) => s.lead_id));
+  check("admin list: all leads", ra.ok && ra.data.total === all.length, ra.ok ? `${ra.data.total} of ${all.length}` : ra.error);
+  const metaSrc = await fetchAll((a, b) => sup.c.from("lead_sources").select("lead_id, sources!inner(code)").eq("sources.code", "meta").order("lead_id").range(a, b));
+  const metaIds = new Set(metaSrc.map((s) => s.lead_id));
   const bySource = await queryLeads(adm.c, adm.id, { filters: { sourceCode: ["meta"] }, pageSize: 100 });
   check("filter: source code", bySource.ok && bySource.data.total === metaIds.size && bySource.data.rows.every((x) => metaIds.has(x.id)), bySource.ok ? `${bySource.data.total} rows` : bySource.error);
   const byProject = await queryLeads(adm.c, adm.id, { filters: { projectId: ["22222222-0000-0000-0000-000000000006"] }, pageSize: 100 });
@@ -123,7 +138,7 @@ async function main() {
 
   // ------------------------------------------------ C. detail
   // The seed's two 'Multi Project Buyer' leads have no source rows, so pick one that does.
-  const { data: srcRows } = await sup.c.from('lead_sources').select('lead_id').in('lead_id', mine.map((l) => l.id));
+  const { data: srcRows } = await sup.c.from('lead_sources').select('lead_id').in('lead_id', mine.slice(0, 100).map((l) => l.id));
   const withSource = new Set((srcRows ?? []).map((r) => r.lead_id));
   const target = mine.find((l) => withSource.has(l.id))!;
   const d = await queryLead(c1.c, target.id);
