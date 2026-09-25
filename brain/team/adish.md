@@ -38,7 +38,10 @@ Newest at the top. One entry per working session.
 ### 2026-09-25 (perf) — Phase B done: lead read rules made fast (migrations 0011, 0012)
 - `/leads` timed out (57014) at 20,042 leads from the bulk seed below. **0011:** `leads_select` written inline with `(select ...)` InitPlans instead of the per-row `can_read_lead(id)`; new index `leads(created_at desc, id)`. **0012:** persons / lead_sources / activities / assignments read as `EXISTS` on `leads` (RLS applies inside, so it is `leads_select` itself); new index `leads(person_id)`. **Apply both: `npx supabase db push`.** Access is unchanged; the caller trap in the performance branch's warning is handled (`my_role() is distinct from 'caller'` guards the scope branches). Decision: D-036.
 - Measured as each role (20k leads): admin count 4.7 s to 73 ms; admin page 6.9 s to 1.8 s; caller page 1.5 s; manager page 8 s (timeout) before 0012. Caller1 sees exactly its 2,890 assigned leads, so no territory leak.
-- **`db:test` (3 of 14) and part of `test:leads` fail while the bulk data is in**: they assume the 27-lead seed and the API's 1,000-row cap. It is data, not a leak (all 1,000 Pune leads the Worli manager sees belong to callers in their own team). Either `npx tsx supabase/tools/seed-bulk.ts --clean` or make the tests scale-safe.
+- **Tests made scale-safe:** `db:test` and `test:leads` assumed the 27-lead seed and the API's 1,000-row cap, so they failed once the bulk data was in (data, not a leak). They now page through every row and assert the real rule (a Pune lead is visible to Worli people only if it belongs to their team). `db:test` 14/14 and `test:leads` pass at 20,042 leads.
+- **Answered the performance open decisions (D-037):** export cap stays 20,000 (narrow the filters, export in parts); counts stay exact for every role (37-73 ms now). The other two are still open.
+- **Still to do from the handoff:** run `analyze public.leads;` and check `last_autoanalyze` (stale-statistics hypothesis), then re-run `npm run db:bench` to record the after numbers next to the baseline below.
+
 
 ### 2026-09-25 — restyle: shell and dashboard (Workroom look)
 - New look from the Figma "CRM Workroom" reference: pale blue-grey page, white rounded cards, one blue accent, floating rounded sidebar with icons, welcome line and user chip in the top bar.
@@ -46,6 +49,40 @@ Newest at the top. One entry per working session.
 - Sidebar icons are keyed by route inside `SidebarNav.tsx`; adding a line to `NAV` needs no change there (unknown routes get a fallback icon). Only the longest matching route is highlighted now, so `/team` no longer lights up on `/team/leads`.
 - For new cards use `rounded-2xl bg-card p-5 shadow-sm` (see `StatCard`), not `border`.
 - tsc and lint pass. **Not looked at in a browser** (the pane can't open localhost): check `/dashboard`, `/leads`, `/users` and a phone-width view.
+
+### 2026-09-25 (later) — baseline budgets measured: it's worse than "slow"
+- **`supabase/tools/bench.ts`** (`npm run db:bench`) built and run against the live 20,042-lead
+  database, signed in as `mgr.worli` and `caller1` (never `super_admin` — see why in the file).
+  Results are written up in full in `10-performance.md` under **Baseline measurements**. Short
+  version:
+- **The `/leads` list for a manager timed out 20/20 times** on the first run — Postgres killed the
+  statement at 8.3-9.2s (error 57014), right after the bulk seed landed. A few minutes later the
+  same query took 1,362ms. **Not confirmed why** (no raw SQL access from here to check
+  `pg_stat_user_tables` for autovacuum timing), but the honest read is stale planner stats right
+  after a 20,000-row write. **Worth a line in the CSV-import runbook** when A3.1's real path is
+  hardened — the same thing could happen after a large real import.
+- **Isolated the cause precisely: it's the exact count, more than the policy alone.** Same query
+  without `count: "exact"`: 280ms, under budget, ~5x faster than the 1,362ms counted version. This
+  is P2-8, and it might be worth landing **before or separately from** the RLS migration (P1-4) —
+  smaller, safer change, no caller/manager leak risk, recovers most of the win on its own. Needs
+  open decision #2 (approximate counts) answered first.
+- **Lead detail is slow even for a single row:** 976ms vs. 400ms budget. Not a scan problem — it's
+  `persons_select`/`lead_sources_select`/`activities_select` each re-calling `can_read_lead()`
+  again per joined row. First real number on the "quieter cost" I flagged under P1-4 originally.
+- **Dashboard is fine for now:** 343ms vs 800ms budget, as manager. Softens P2-10's urgency, doesn't
+  remove it — single-pass aggregate, will get worse as leads and managers grow.
+- **The export cap is not hypothetical anymore.** `EXPORT_MAX_ROWS` (20,000) and the actual row
+  count (20,042) crossed the moment the bulk seed landed — an unfiltered export is refused outright
+  today, in 2.1s, not merely slow. **Open decision #3 just became urgent**, not a Phase C
+  nice-to-have. A filtered export (one project, 3,279 rows) took 4,902ms, well inside the 30s
+  budget — extrapolating that to 20k isn't trustworthy since cost is partly per-page, not linear.
+- Consolidated three scratch scripts (a broad sweep, a cause-isolating probe, an export-only check)
+  into the one `bench.ts` committed here — smaller iteration count on purpose (5, not 20) with an
+  early-stop after 2 failures, so a future re-run after Phase B doesn't hammer the shared project
+  the way the first sweep did if something regresses.
+- `10-performance.md` updated throughout: a new **Baseline measurements** section, the Targets
+  table points to it, decision #3 marked urgent, and a note in the Phase B plan about landing P2-8
+  separately.
 
 ### 2026-09-25 — bulk seed run against the shared project
 - **The shared database now holds 20,042 leads** (the original 42 + 20,000 mock). Everyone's

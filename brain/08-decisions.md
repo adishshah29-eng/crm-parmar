@@ -148,3 +148,8 @@ Found by Adish: `/leads` failed with statement timeout 57014. Measured at 20,042
 - **Trap kept:** a caller inherits their manager's territory rows in `my_scope_projects()`, so the scope branches carry `my_role() is distinct from 'caller'`. Without it callers would see territory leads.
 *`can_read_lead()` still exists and still governs write policies. Update and detail paths are unchanged.*
 - **Follow-up (migration 0012):** after 0011 a manager's page still timed out (8 s) because `persons_select` ran `can_read_lead()` per lead and `leads.person_id` had no index. Now "you see a person, source row, activity or assignment if you can see its lead" is an `EXISTS` on `leads` (RLS applies inside it, so it is `leads_select` itself and cannot drift), plus `leads(person_id)` index.
+
+**D-037 | 2026-09-25 | Performance open decisions #2 and #3 answered (Adish)**
+- **Export cap stays at 20,000; an export over it must be narrowed** (by project, date, owner) and taken in parts. The refusal message already says so. It is a deliberate limit on how much customer data leaves in one audited export, not a bug. Streaming export (P2-9) is not needed for this reason. `EXPORT_MAX_ROWS` in `lib/leads/export.ts` is unchanged.
+- **Row counts stay exact for every role** (`count: "exact"`). After 0011/0012 the exact count takes 37-73 ms for admin, manager and caller at 20,042 leads, so there is nothing to trade away. Revisit only if the count is measured slow again at a much larger size.
+- Still open (Gautam / later): #1 JWT staleness vs instant deactivation, #4 page size. They gate Phase C only.

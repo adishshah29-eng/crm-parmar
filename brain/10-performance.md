@@ -9,7 +9,9 @@ fourteen access tests pass in both directions.** Speed is never bought with visi
 
 ## Targets
 
-Measured server-side, p95, on a database holding 20,000 leads.
+Measured server-side, p95, on a database holding 20,000 leads. **See "Baseline measurements"
+below for the real, pre-migration numbers** — one of these targets currently can't be measured at
+all (the list query times out) and another currently can't be attempted at all (the export cap).
 
 | Screen | Budget |
 |---|---|
@@ -43,6 +45,97 @@ because there is nothing yet to measure. Before any fix lands:
    each round rather than guessing which screen is slow.
 
 Re-measure after every phase. A fix that does not move a number is not a fix.
+
+---
+
+## Baseline measurements — 2026-09-25, pre-migration
+
+Measured with `supabase/tools/bench.ts` (`npm run db:bench`), signed in as `mgr.worli@parmar.test`
+and `caller1@parmar.test` — never `super_admin`, for the reason step zero gives. This is DB + RLS
+round-trip time from the tool's environment, not a Vercel deployment: P0-1 (region) and P0-2
+(duplicate auth calls) are not reproducible until there is a real `bom1` deploy to measure against.
+
+**Headline: this is not a "slow" problem, it is an "unusable" one at the current row count.**
+
+| Budget | Target | Measured (manager) | Measured (caller) |
+|---|---|---|---|
+| `/leads` list, 25 rows | 500 ms | **timed out — see below** | 309 ms (OK) |
+| lead detail | 400 ms | 976 ms (OVER, 2.4×) | not re-measured, expected similar |
+| search (phone digits) | 600 ms | not resolved (list itself unstable — see below) | — |
+| `/dashboard` | 800 ms | 343 ms (OK) | n/a — not in caller's nav |
+| CSV export, 20,000 rows | 30 s | **impossible right now — see below** | admin-only |
+
+### The `/leads` list, first measured: 20 out of 20 runs timed out
+
+The first run (`bench.ts`'s original 20-iteration sweep, immediately after the 20,000-row bulk
+seed landed) had the manager's `/leads` query fail **every single time** — Postgres error `57014`,
+`canceling statement due to statement timeout`, at 8.3–9.2 seconds each. Not slow: the query does
+not complete at all within whatever statement timeout the free-tier project enforces.
+
+The sweep was stopped after confirming this (killed rather than let it run all planned iterations
+across every query type — hammering a database four people share with dozens more 8–9 second
+timeout queries once the answer is already clear serves nobody). A follow-up run a few minutes
+later, same query, same data, completed in **1,362 ms** — still 2.7× over budget, but no longer a
+hard failure.
+
+**This instability is itself a finding, not just noise to average away.** The honest read: right
+after a large bulk write, before Postgres's autovacuum/`ANALYZE` has updated planner statistics on
+the changed table, the planner can pick a catastrophically bad plan for a query that becomes merely
+slow once stats settle. This was **not confirmed directly** — this environment has no raw SQL
+access (PostgREST + the anon key only, no connection string), so `pg_stat_user_tables` was never
+queried to prove autovacuum timing was the actual cause rather than, say, cold caches. Whoever has
+dashboard/SQL-editor access should check `last_autoanalyze` on `leads` next time this is
+reproduced, and consider `analyze public.leads;` as a documented step after any large import —
+**this deserves its own line in the CSV-import runbook, not just this file**, since the real import
+path (task A3.1) will someday land thousands of rows the same way this bulk seed did.
+
+### Isolating the cause: it's P2-8 (exact count), compounding P1-4, not either alone
+
+Same manager, same query, with `count: "exact"` removed (`filteredLeads(..., withCount: false)`):
+**280 ms** — under the 500 ms budget, a ~5× improvement over the 1,362 ms counted version. This
+confirms P2-8's diagnosis directly: `count: "exact"` forces the RLS-filtered scan across the
+**entire** visible set on every page load, not just the 25 displayed rows, and that scan is what
+the (still un-migrated) `can_read_lead()` policy makes expensive per row.
+
+**Reprioritisation worth considering for Phase B:** dropping the exact count is a smaller, lower-risk
+change than flattening the RLS policy (P1-4) — no security semantics to get right, no caller/manager
+leak risk — and on its own recovers most of the budget. It does not replace P1-4 (the underlying
+per-row policy cost is still real, still worth fixing, and search/detail still pay it), but it may
+be worth landing **first**, decoupled from the RLS migration, if an approximate-count UI (open
+decision #2) gets a quick yes.
+
+### Lead detail: slow even for one row
+
+976 ms for a single lead by primary key, well over the 400 ms budget. Unlike the list, this isn't
+about scanning many rows — `queryLead()` joins `persons`, `projects`, `owner`, `lead_sources` and
+`lead_activities` in one query, and **each of those has its own RLS policy that calls
+`can_read_lead(lead_id)` again**, redundantly, once per related row returned. This is the "quieter
+cost" already named in P1-4's write-up (`persons_select`, `lead_sources_select`,
+`activities_select`) — this is the first real number attached to it.
+
+### `/dashboard`: fine for now, don't take that as "done"
+
+343 ms, under the 800 ms budget, for a manager. Better than expected given `dashboard_counts`
+scans all of `leads` — plausibly because it's a single aggregate pass (one scan, like the
+no-count list variant) rather than the list's effective double-scan (count + fetch). **This softens
+P2-10's urgency, it doesn't remove it**: more managers, more leads, or a caller-visible version
+later would all push this back over budget, and it is still evaluating `can_read_lead()`-equivalent
+logic per row today. Worth re-measuring after Phase B, not worth building the caching or the
+materialised-table version pre-emptively on today's number.
+
+### Export: the cap and the row count have already crossed
+
+An unfiltered export was attempted first, to record what happens today: **refused**, in 2.1 s —
+`"That is 20,042 leads; one export is limited to 20,000."` `EXPORT_MAX_ROWS` and the database's
+actual row count crossed the moment the bulk seed landed. **Open decision #3 in this file is no
+longer hypothetical** — a real admin trying to export everything today cannot, at all, regardless
+of how fast the query would be.
+
+A filtered export (one project, 3,279 rows) completed in 4,902 ms — comfortably inside the 30 s
+budget on its own. Scaling that linearly to 20,000 rows lands right around the 30 s budget line,
+but that extrapolation should not be trusted: the cost is partly per-row and partly per-page (20
+sequential 1,000-row requests instead of 4), so it is not a straight line, and the true number for
+20,000 rows can't be measured until decision #3 raises the cap, adds true streaming (P2-9), or both.
 
 ---
 
@@ -312,6 +405,11 @@ plus `lead_activities` growth is also the point where 500 MB stops being roomy.
 
 **Phase B — migration 0011, Adish only, gated on the access tests.** The 20,000-row work.
 
+4.5. **Consider landing first, decoupled from the rest of Phase B:** dropping `count: "exact"` from
+   the list query (P2-8). The baseline measurement above shows this alone takes the manager list
+   from 1,362 ms to 280 ms — most of the win, none of the RLS-policy leak risk P1-4 carries. Needs
+   open decision #2 (approximate counts) answered first, but it's a smaller, safer, separately
+   shippable change than the migration below.
 5. Flat RLS policies on `leads`, `persons`, `lead_sources`, `lead_activities`, `site_visits`.
 6. The indexes in P1-5.
 7. `pg_trgm` and the two GIN indexes.
@@ -337,8 +435,12 @@ assumed; they become a `D-0xx` entry in `08-decisions.md` once answered.
    stay instant, P0-2 is solved by the interim step only, and P0-1 carries that phase.)
 2. **Exact row counts.** May the list show an approximate total ("about 4,300") for non-admins, or
    is an exact number required on every page?
-3. **Export cap.** `EXPORT_MAX_ROWS` is 20,000 — which is now the whole database. Is exporting
-   everything in one file intended, or should the cap force a narrower filter?
+3. **Export cap — no longer hypothetical, confirmed live 2026-09-25.** `EXPORT_MAX_ROWS` (20,000)
+   and the database's actual row count (20,042) have crossed: an unfiltered export is refused
+   outright today, not merely slow. Someone needs to decide whether to raise the cap, require a
+   narrower filter, or ship the streaming export (P2-9) before this comes up in real use — this is
+   the one open decision on this list that is actively blocking something right now, not a Phase C
+   nice-to-have.
 4. **Page size.** 25 rows. On a manager's desktop screen 50 costs nothing extra once P1-4 lands.
 
 ## Validation

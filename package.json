@@ -15,7 +15,8 @@
     "test:territory": "tsx supabase/tests/run-territory-tests.ts",
     "test:admin": "tsx supabase/tests/run-admin-tests.ts",
     "test:dashboard": "tsx supabase/tests/run-dashboard-tests.ts",
-    "db:seed-bulk": "tsx supabase/tools/seed-bulk.ts"
+    "db:seed-bulk": "tsx supabase/tools/seed-bulk.ts",
+    "db:bench": "tsx supabase/tools/bench.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
