@@ -35,6 +35,40 @@ _(anything the other three should know: a pattern you established, a gotcha you 
 
 Newest at the top. One entry per working session.
 
+### 2026-09-25 (later) — baseline budgets measured: it's worse than "slow"
+- **`supabase/tools/bench.ts`** (`npm run db:bench`) built and run against the live 20,042-lead
+  database, signed in as `mgr.worli` and `caller1` (never `super_admin` — see why in the file).
+  Results are written up in full in `10-performance.md` under **Baseline measurements**. Short
+  version:
+- **The `/leads` list for a manager timed out 20/20 times** on the first run — Postgres killed the
+  statement at 8.3-9.2s (error 57014), right after the bulk seed landed. A few minutes later the
+  same query took 1,362ms. **Not confirmed why** (no raw SQL access from here to check
+  `pg_stat_user_tables` for autovacuum timing), but the honest read is stale planner stats right
+  after a 20,000-row write. **Worth a line in the CSV-import runbook** when A3.1's real path is
+  hardened — the same thing could happen after a large real import.
+- **Isolated the cause precisely: it's the exact count, more than the policy alone.** Same query
+  without `count: "exact"`: 280ms, under budget, ~5x faster than the 1,362ms counted version. This
+  is P2-8, and it might be worth landing **before or separately from** the RLS migration (P1-4) —
+  smaller, safer change, no caller/manager leak risk, recovers most of the win on its own. Needs
+  open decision #2 (approximate counts) answered first.
+- **Lead detail is slow even for a single row:** 976ms vs. 400ms budget. Not a scan problem — it's
+  `persons_select`/`lead_sources_select`/`activities_select` each re-calling `can_read_lead()`
+  again per joined row. First real number on the "quieter cost" I flagged under P1-4 originally.
+- **Dashboard is fine for now:** 343ms vs 800ms budget, as manager. Softens P2-10's urgency, doesn't
+  remove it — single-pass aggregate, will get worse as leads and managers grow.
+- **The export cap is not hypothetical anymore.** `EXPORT_MAX_ROWS` (20,000) and the actual row
+  count (20,042) crossed the moment the bulk seed landed — an unfiltered export is refused outright
+  today, in 2.1s, not merely slow. **Open decision #3 just became urgent**, not a Phase C
+  nice-to-have. A filtered export (one project, 3,279 rows) took 4,902ms, well inside the 30s
+  budget — extrapolating that to 20k isn't trustworthy since cost is partly per-page, not linear.
+- Consolidated three scratch scripts (a broad sweep, a cause-isolating probe, an export-only check)
+  into the one `bench.ts` committed here — smaller iteration count on purpose (5, not 20) with an
+  early-stop after 2 failures, so a future re-run after Phase B doesn't hammer the shared project
+  the way the first sweep did if something regresses.
+- `10-performance.md` updated throughout: a new **Baseline measurements** section, the Targets
+  table points to it, decision #3 marked urgent, and a note in the Phase B plan about landing P2-8
+  separately.
+
 ### 2026-09-25 — bulk seed run against the shared project
 - **The shared database now holds 20,042 leads** (the original 42 + 20,000 mock). Everyone's
   `/leads`, `/dashboard` etc. will look very different next time you pull and run — this is
