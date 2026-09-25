@@ -40,7 +40,7 @@ Newest at the top. One entry per working session.
 - **`npm run db:bench` is now a gate:** exits 1 if any budget is missed (list 500, detail 400, search 600, dashboard 800 ms). To add your screen, copy a block in `supabase/tools/bench.ts` (instructions in its header).
 - **A PR template** (`.github/pull_request_template.md`) now asks for roles checked, phone check, bench numbers and the migration checklist.
 - **`db:test` check 15** briefly switches caller3 off (about a second). If you are signed in as caller3 you are kicked out, so use caller1 or caller2 for your own testing.
-- **Gate result today:** all budgets met except search (1.5 s) until `0013` is applied.
+- **Gate result:** search was NOT fixed by 0013 (trigram indexes are not used under row-level security). The real cause was the `persons_write` policy (FOR ALL, so it filtered reads, admin check once per row): **migration 0016** fixes it and the same pattern on `audit_log`, `notifications`, `attendance`, `site_visits` (D-041). After 0016: **all budgets met** (search 172 ms), `db:test` 17/17, `test:leads` pass.
 
 ### 2026-09-25 (phase 1) — safety net, headers, loading states, phone sizing
 - **Errors:** `app/(app)/error.tsx` (inside the shell, so the sidebar stays and there is a "Try again"), `app/error.tsx`, `app/global-error.tsx`, `app/not-found.tsx`, all using `components/shared/RouteError.tsx`. Next 16.3 passes `retry`, not `reset`. The server error's real message is never shown; its `digest` is shown as a reference and logged.

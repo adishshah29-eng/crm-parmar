@@ -59,11 +59,14 @@ Same tool, same 20,042 leads, same users. Statistics refreshed (`analyze public.
 | Manager `/dashboard` (800 ms) | 343 ms | **60 ms** |
 | Caller `/leads` (500 ms) | 580 ms | **46 ms** |
 | Caller lead detail (400 ms) | n/a | **47 ms** |
-| Manager search by phone digits (600 ms) | 2,741 ms | 1,429 ms; **0013 (trigram) pending** |
+| Manager search by phone digits (600 ms) | 2,741 ms | **172 ms** (after 0016; the trigram indexes in 0013 turned out not to be used under row-level security, see D-041) |
 | Export, unfiltered | refused after 2.1 s (cap 20,000) | refused after 0.2 s, by design (D-037) |
 | Export, one project, 3,279 rows | 4.9 s | 2.9 s (budget 30 s) |
 
+**`npm run db:bench` on 2026-09-25 after 0016: All budgets met** (manager list 65 ms, search 176 ms, lead detail 57 ms, dashboard 85 ms; caller list 43 ms, detail 69 ms; filtered export 1.7 s). `db:test` 17/17, `test:leads` pass.
+
 What did it, in order of effect:
+0. **The `persons` policy (0016).** `persons_write` is FOR ALL, so it filtered reads too and ran `app.is_admin()` once per row: counting all people cost 1.9 s against 74 ms for leads. This, not the search itself, was why search was slow (1.5 s to 172 ms). The same pattern was fixed on `audit_log`, `notifications`, `attendance`, `site_visits`.
 1. **The sort.** `nullsFirst: false` on `created_at` stopped Postgres using the `leads(created_at desc, id)` index, so it sorted all ~14,000 visible rows: 1.5 s versus 55 ms. `created_at` is NOT NULL, so the option was pointless; it is now only applied to sortable columns that can be null.
 2. **The buyer join.** `persons!inner` made the exact count visit `persons` per lead (1.4-1.7 s). It is now a plain join except when searching.
 3. **0011 / 0012** (D-036): row-independent checks are once-per-query InitPlans; `persons`/`lead_sources`/activities/assignments read as `EXISTS` on `leads`; indexes on `leads(created_at desc, id)` and `leads(person_id)`.
