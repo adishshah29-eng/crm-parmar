@@ -13,14 +13,14 @@ export function RangeToggle({ range }: { range: DashboardRange }) {
     { value: "all", label: "All time" },
   ];
   return (
-    <nav aria-label="Time range" className="inline-flex rounded-lg border p-0.5">
+    <nav aria-label="Time range" className="inline-flex rounded-full bg-card p-1 shadow-sm">
       {options.map((o) => (
         <Link
           key={o.value}
           href={`?range=${o.value}`}
           aria-current={range === o.value ? "page" : undefined}
           className={cn(
-            "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
             range === o.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
           )}
         >

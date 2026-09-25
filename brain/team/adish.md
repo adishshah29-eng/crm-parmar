@@ -35,6 +35,13 @@ _(anything the other three should know: a pattern you established, a gotcha you 
 
 Newest at the top. One entry per working session.
 
+### 2026-09-25 — restyle: shell and dashboard (Workroom look)
+- New look from the Figma "CRM Workroom" reference: pale blue-grey page, white rounded cards, one blue accent, floating rounded sidebar with icons, welcome line and user chip in the top bar.
+- **All colours and the corner radius are tokens in `src/app/globals.css`**, so every screen (yours too) picks up the new blue and rounder corners with no change. The status-badge palette in `07-ui-conventions.md` is untouched.
+- Sidebar icons are keyed by route inside `SidebarNav.tsx`; adding a line to `NAV` needs no change there (unknown routes get a fallback icon). Only the longest matching route is highlighted now, so `/team` no longer lights up on `/team/leads`.
+- For new cards use `rounded-2xl bg-card p-5 shadow-sm` (see `StatCard`), not `border`.
+- tsc and lint pass. **Not looked at in a browser** (the pane can't open localhost): check `/dashboard`, `/leads`, `/users` and a phone-width view.
+
 ### 2026-09-20 (final) — dashboards built
 - **D1.1–D2.4 built:** `/dashboard` with the four headline numbers, a Today / All-time toggle at the top, the lead-routing panel (admins), and every manager's portfolio by stage. Counted in SQL: **migration 0010** (`dashboard_counts`, `dashboard_portfolios`). **Apply it, then `npm run db:types`.**
 - Meaning of every number, and what the toggle changes: **D-035**. Assumptions to confirm are marked there (Monday week start, portfolio = own + team leads, default range Today, unassigned untouched leads counted).

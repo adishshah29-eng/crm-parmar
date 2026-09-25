@@ -27,10 +27,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const listHref = isAdmin ? "/leads" : undefined;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">{isAdmin ? "The whole company" : "Your territory and team"}</p>
         </div>
         <RangeToggle range={range} />
@@ -40,7 +40,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <ErrorState message={result.error} />
       ) : (
         <>
-          <section aria-label="Headline numbers" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <section aria-label="Headline numbers" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               label={range === "today" ? "Leads received today" : "Total leads"}
               value={result.data.totalLeads}

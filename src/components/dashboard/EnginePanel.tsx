@@ -14,7 +14,7 @@ export function EnginePanel({ engine, leadsHref }: { engine: DashboardData["engi
         </h2>
         <span className="text-sm text-muted-foreground">Leads nobody owns yet</span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
           label="Unassigned"
           value={engine.unassigned}

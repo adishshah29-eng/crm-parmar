@@ -26,7 +26,7 @@ export function PortfolioTable({
     return <EmptyState title="No managers to show" hint="Managers appear here once they exist. Create one on the Users page, then give them a territory." />;
   }
   return (
-    <div className="overflow-auto rounded-lg border">
+    <div className="overflow-auto rounded-2xl bg-card p-2 shadow-sm">
       <Table>
         <TableHeader>
           <TableRow>
@@ -42,13 +42,23 @@ export function PortfolioTable({
           {portfolios.map((p) => (
             <TableRow key={p.managerId}>
               <TableCell className="font-medium">
-                {leadsHref ? (
-                  <Link href={leadsHref(p.managerId)} className="underline-offset-2 hover:underline">
-                    {p.name}
-                  </Link>
-                ) : (
-                  p.name
-                )}
+                <span className="flex items-center gap-3">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-accent text-xs font-semibold text-accent-foreground" aria-hidden>
+                    {p.name
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((w) => w[0]!.toUpperCase())
+                      .join("")}
+                  </span>
+                  {leadsHref ? (
+                    <Link href={leadsHref(p.managerId)} className="underline-offset-2 hover:underline">
+                      {p.name}
+                    </Link>
+                  ) : (
+                    p.name
+                  )}
+                </span>
               </TableCell>
               <TableCell className="text-right tabular-nums">{n(p.leadCount)}</TableCell>
               <TableCell>

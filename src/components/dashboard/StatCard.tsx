@@ -24,7 +24,7 @@ export function StatCard({
       <p className="text-sm text-muted-foreground">{label}</p>
       <p
         className={cn(
-          "mt-1 text-3xl font-semibold tracking-tight tabular-nums",
+          "mt-2 text-4xl font-semibold tracking-tight tabular-nums",
           tone === "breach" && value > 0 && "text-red-800",
           tone === "attention" && value > 0 && "text-amber-800",
         )}
@@ -34,9 +34,9 @@ export function StatCard({
       {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </>
   );
-  const cls = "block rounded-lg border p-4";
+  const cls = "block rounded-2xl bg-card p-5 shadow-sm";
   return href ? (
-    <Link href={href} className={cn(cls, "transition-colors hover:bg-muted/50")}>
+    <Link href={href} className={cn(cls, "transition-shadow hover:shadow-md")}>
       {body}
     </Link>
   ) : (
