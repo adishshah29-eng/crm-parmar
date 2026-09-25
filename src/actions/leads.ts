@@ -14,8 +14,19 @@ import type { CallOutcomeInput, LeadListParams } from "@/lib/schemas/lead";
 
 const SIGN_IN_AGAIN = "Please sign in again.";
 
-// Lead data shows up on several routes across portals; refresh them all.
-const refresh = () => revalidatePath("/", "layout");
+/**
+ * Lead data shows up on several routes across portals. revalidatePath("/", "layout") used to sit
+ * here, which purges the router cache for the WHOLE app on every saved call outcome or remark
+ * (brain/10-performance.md, P0-3) — narrowed to the routes that actually show lead rows.
+ * "/leads" uses "layout" so it also covers "/leads/[id]". "/my-day" is Tanishka's stub today
+ * (task C1.1) but the real path already exists, so her build needs no change here. When Arisha's
+ * "/team/leads" (task B1.1) lands, add it to this list — it is shared by every portal on purpose.
+ */
+const refresh = () => {
+  revalidatePath("/leads", "layout");
+  revalidatePath("/dashboard");
+  revalidatePath("/my-day", "layout");
+};
 
 export async function getLeads(
   params: LeadListParams,

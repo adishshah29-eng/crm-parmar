@@ -15,6 +15,7 @@ This folder is the brain of the project. Everything an AI agent or a new develop
 | `07-ui-conventions.md` | Component patterns, naming, styling |
 | `08-decisions.md` | Decisions already made, and why |
 | `09-glossary.md` | Words we use and exactly what they mean |
+| `10-performance.md` | What is slow, why, and the order to fix it in at 20,000 leads |
 | `SHARED-CORE.md` | What the shared core already provides, and the contracts for what is still coming |
 | `IMPLEMENTATION-PLAN.md` | Who builds what, in which week |
 | `PHASE-0-RUNBOOK.md` | Adish's step-by-step setup, blocks everyone |

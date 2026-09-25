@@ -35,12 +35,93 @@ _(anything the other three should know: a pattern you established, a gotcha you 
 
 Newest at the top. One entry per working session.
 
+### 2026-09-25 (perf) — Phase B done: lead read rules made fast (migrations 0011, 0012)
+- `/leads` timed out (57014) at 20,042 leads from the bulk seed below. **0011:** `leads_select` written inline with `(select ...)` InitPlans instead of the per-row `can_read_lead(id)`; new index `leads(created_at desc, id)`. **0012:** persons / lead_sources / activities / assignments read as `EXISTS` on `leads` (RLS applies inside, so it is `leads_select` itself); new index `leads(person_id)`. **Apply both: `npx supabase db push`.** Access is unchanged; the caller trap in the performance branch's warning is handled (`my_role() is distinct from 'caller'` guards the scope branches). Decision: D-036.
+- Measured as each role (20k leads): admin count 4.7 s to 73 ms; admin page 6.9 s to 1.8 s; caller page 1.5 s; manager page 8 s (timeout) before 0012. Caller1 sees exactly its 2,890 assigned leads, so no territory leak.
+- **`db:test` (3 of 14) and part of `test:leads` fail while the bulk data is in**: they assume the 27-lead seed and the API's 1,000-row cap. It is data, not a leak (all 1,000 Pune leads the Worli manager sees belong to callers in their own team). Either `npx tsx supabase/tools/seed-bulk.ts --clean` or make the tests scale-safe.
+
 ### 2026-09-25 — restyle: shell and dashboard (Workroom look)
 - New look from the Figma "CRM Workroom" reference: pale blue-grey page, white rounded cards, one blue accent, floating rounded sidebar with icons, welcome line and user chip in the top bar.
 - **All colours and the corner radius are tokens in `src/app/globals.css`**, so every screen (yours too) picks up the new blue and rounder corners with no change. The status-badge palette in `07-ui-conventions.md` is untouched.
 - Sidebar icons are keyed by route inside `SidebarNav.tsx`; adding a line to `NAV` needs no change there (unknown routes get a fallback icon). Only the longest matching route is highlighted now, so `/team` no longer lights up on `/team/leads`.
 - For new cards use `rounded-2xl bg-card p-5 shadow-sm` (see `StatCard`), not `border`.
 - tsc and lint pass. **Not looked at in a browser** (the pane can't open localhost): check `/dashboard`, `/leads`, `/users` and a phone-width view.
+
+### 2026-09-25 — bulk seed run against the shared project
+- **The shared database now holds 20,042 leads** (the original 42 + 20,000 mock). Everyone's
+  `/leads`, `/dashboard` etc. will look very different next time you pull and run — this is
+  expected, not a bug. Bulk rows are `Bulk Buyer <n>` / phones `+9199…` / `bulk-buyer-<n>@example.test`,
+  easy to tell apart from the real seed.
+- **Changed the script's approach before running it**: it no longer wants the service_role key.
+  `leads_insert`/`persons_write`/`lead_sources_insert` already grant to `app.is_admin()`, so it
+  signs in as `super@parmar.test` and writes through ordinary RLS instead — no reason to reach for
+  the key that bypasses it when admin can already do the insert the normal way.
+- Did a 50-row dry run first (first time this script had touched a live database), verified the
+  distribution and the `--clean` round-trip, then ran the real 20,000. Final counts match the
+  intended distribution: ~25% untouched with an SLA clock, ~15% unassigned, ~8% of the untouched
+  already breached.
+- `.env.local` is in place on this machine (gitignored, not committed, not shared here).
+- **What's still not done: no baseline numbers.** Seeding is step zero, not the measurement.
+  Whoever picks up Phase B needs to measure the five budgets in `10-performance.md` **signed in as
+  a manager or caller** — `super_admin`'s `is_admin()` short-circuit flatters the RLS cost the same
+  way the `postgres` role does, so it would silently hide exactly what P1-4 is about.
+- `10-performance.md` step zero and the Phase A checklist updated to reflect all of the above.
+
+### 2026-09-24 (later) — Phase A of the performance plan
+- **`vercel.json`** added, pinning Vercel functions to `bom1` (Mumbai) instead of the default
+  `iad1` (Washington). Takes effect on the next deploy; nothing to measure locally.
+- **`revalidatePath("/", "layout")` removed** from `src/actions/leads.ts` and
+  `src/actions/assignment.ts` — it was purging the whole app's router cache on every saved call
+  outcome, remark, reassign and bulk assign. Both now narrow to `/leads` (layout, covers
+  `/leads/[id]`), `/dashboard`, `/my-day` (layout). `org.ts`'s two refresh functions were already
+  scoped correctly and needed no change. **For Arisha:** when `/team/leads` (B1.1) lands, add it to
+  the `refresh()` list in both files — it's shared by every portal on purpose, don't add a third copy.
+- **Reference-data caching (projects/sources/users) investigated, not built.** `"use cache"` and
+  `unstable_cache` both refuse to read `cookies()` inside the cached scope, and our Supabase client
+  needs the session cookie even for the `using (true)` tables, so the honest version caches
+  per-session, not cross-user — a fraction of the win it looks like. The real version wants the
+  JWT-claims work already queued in `10-performance.md` Phase C. Written up in P2-7 so nobody
+  rediscovers this mid-sprint. Small session-scoped version is still available if anyone wants it
+  sooner, at the cost of a bit of complexity for a partial win — I'd rather wait for Phase C.
+- **`supabase/tools/seed-bulk.ts` built** (`npm run db:seed-bulk`, needs `SUPABASE_SERVICE_ROLE_KEY`
+  same as `create-test-users.mjs`). Inserts up to 20,000 mock leads on top of the existing seed —
+  phones start `+9199` so they're identifiable and reversible (`--clean` removes them). Spreads
+  across all 6 projects, the 6 non-admin seeded users as owners plus 15% unassigned, dates over the
+  last year (80% recent), and a realistic mix of touched/untouched/SLA-breached so the indexes and
+  filters in Phase B actually get exercised rather than flattered. **Not run yet against the shared
+  project** — whoever runs it, say so here first, it's 20,000 rows everyone's dev session will see.
+- `npx tsc --noEmit`, `eslint` on the touched files, and `next build` all clean.
+- Baseline numbers for the five budgets in `10-performance.md` are still outstanding — need the
+  bulk seed run first, then measured as `authenticated`, not as `postgres` (P0's own step zero).
+
+### 2026-09-24 — performance design for 20,000 leads
+- New brain file: **`10-performance.md`** (added to the read order in `00-START-HERE.md`). What is
+  slow, why, and the order to fix it in. Read it before Week 2 work — Phase B changes the RLS
+  policies everyone's screens sit on.
+- **The three biggest causes are not about data volume**, which is why the app already feels slow
+  at 42 leads: (1) no `vercel.json`, so functions run in Washington while the database is in
+  Mumbai — ~230 ms per round trip, six round trips a page; (2) the proxy and the page each fetch
+  the user twice over, four trips for two facts; (3) `revalidatePath("/", "layout")` on every
+  saved outcome purges the whole app's cache.
+- **The 20,000-row killer is the `leads_select` policy.** `can_read_lead(id)` is SECURITY DEFINER,
+  so it is never inlined, and it re-reads by primary key the row Postgres already has, calling
+  three more SECURITY DEFINER helpers inside. Six sub-plans a row, run across the whole filtered
+  set because we ask for `count: "exact"`. It also stops the planner using the `assigned_to`,
+  `project_id` and `location_id` indexes at all.
+- **Warning for whoever writes migration 0011** (proposed SQL is in the file, nothing applied):
+  flattening that policy naively **leaks every caller their manager's whole territory**.
+  `my_scope_projects()` resolves upward through ancestors, and today only the `caller` branch in
+  `can_read_lead` stops it being consulted. Carry that branch across or the caller role is gone.
+  Gate: all fourteen access tests, the six manual ones, plus a new negative test for exactly this.
+- Also found: **no index on `leads.created_at`**, which is the default sort — every list query
+  sorts the whole visible set for 25 rows. And search is `ilike '%x%'`, which no btree can serve;
+  `pg_trgm` GIN indexes fix it with no application change.
+- **Four decisions I need from Gautam** before Phase C (listed at the end of the file): JWT
+  staleness vs. instant deactivation, exact vs. approximate row counts, the 20,000 export cap now
+  that it is the whole database, and page size.
+- Nothing measured yet, and that is the first task: we have 42 leads. Step zero in the file is a
+  20,000-row seed, because measuring as `postgres` bypasses RLS and will tell you everything is fast.
+- Installed the `system-design` skill at `.claude/skills/system-design/`.
 
 ### 2026-09-20 (final) — dashboards built
 - **D1.1–D2.4 built:** `/dashboard` with the four headline numbers, a Today / All-time toggle at the top, the lead-routing panel (admins), and every manager's portfolio by stage. Counted in SQL: **migration 0010** (`dashboard_counts`, `dashboard_portfolios`). **Apply it, then `npm run db:types`.**
