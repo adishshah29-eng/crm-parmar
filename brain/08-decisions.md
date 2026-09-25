@@ -139,3 +139,12 @@ Decided by Adish for the toggle; the definitions below are the build's reading o
 - **Who sees what:** callers are redirected to My Day. Admins see the company and the engine panel. Managers see their territory and team, and only their own portfolio row (users RLS). A sub_manager gets the totals for their inherited territory and no portfolio rows.
 - Default range is **Today** (assumption). The page links a portfolio row to `/leads?owner=team:<id>` (admins only; managers' lead list is Arisha's portal).
 *Consequence: "site visits" and "visits booked" read 0 until Sayli's flows fill `site_visits`.*
+
+**D-036 | 2026-09-25 | Lead read rules rewritten for speed (migration 0011). Access is unchanged.**
+Found by Adish: `/leads` failed with statement timeout 57014. Measured at 20,042 leads (about 16,700 people, no import records: bulk data loaded outside the app): exact count 4.7 s, one 25-row page 6.9 s, page plus count over the 8 s API limit.
+- **Cause:** `leads_select` was `app.can_read_lead(id)`, a SECURITY DEFINER function of the row id. It cannot be inlined, so every row ran `is_admin()` and a lookup, and the sort had to evaluate every row first.
+- **Fix:** `leads_select` is spelled out in SQL with everything row-independent wrapped in `(select ...)` (evaluated once per query). The read policies on `persons`, `lead_sources`, `lead_activities`, `assignments` try `(select app.is_admin())` first. New index `leads(created_at desc, id)`.
+- **Rule for new policies:** never call a function of the row id for the common case. Put the row-independent part in `(select ...)` and keep per-row calls as the fallback.
+- **Trap kept:** a caller inherits their manager's territory rows in `my_scope_projects()`, so the scope branches carry `my_role() is distinct from 'caller'`. Without it callers would see territory leads.
+*`can_read_lead()` still exists and still governs write policies. Update and detail paths are unchanged.*
+- **Follow-up (migration 0012):** after 0011 a manager's page still timed out (8 s) because `persons_select` ran `can_read_lead()` per lead and `leads.person_id` had no index. Now "you see a person, source row, activity or assignment if you can see its lead" is an `EXISTS` on `leads` (RLS applies inside it, so it is `leads_select` itself and cannot drift), plus `leads(person_id)` index.
